@@ -157,6 +157,9 @@ async function sendAnalysis(partFrames,part,prior){
     method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({task:"analyze",prompt:mk(partFrames,part,prior),images:images})
   });
+  if(response.status===503){
+    throw new Error("Server is currently experiencing high demand. Please try again later.");
+  }
   var data=await response.json();
   if(!response.ok)throw new Error(data.error||"AI analysis request failed.");
   return data.result;
