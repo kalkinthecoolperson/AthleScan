@@ -37,11 +37,12 @@ video{width:100%;border-radius:12px;margin-top:12px;background:#000;max-height:5
 .fix .do{background:color-mix(in srgb,var(--acc) 12%,transparent);padding:10px;border-radius:10px;margin:8px 0}
 ul{margin:6px 0 0;padding-left:20px}.note{font-size:13px;color:var(--mute);margin-top:18px}
 .strip{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}.strip img{height:64px;border-radius:8px;flex:none}
+.account-button{margin-left:auto;background:transparent;border:1px solid var(--line);border-radius:12px;color:var(--ink);padding:9px 12px;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}.account-panel{position:fixed;z-index:30;right:clamp(12px,4vw,48px);top:76px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;width:min(350px,calc(100vw - 24px));box-shadow:0 15px 45px #000b}.account-panel button{margin-top:10px}.account-panel p{overflow-wrap:anywhere;margin:8px 0}.account-panel .btn{padding:10px;min-height:40px}.account-panel .muted{color:var(--mute);font-size:13px}@media(max-width:480px){.account-button{font-size:12px;padding:8px}.logo .wm{font-size:10px;letter-spacing:.1em}.top{gap:5px}}
 </style>
 </head>
 <body>
 <main>
-<div class="top"><button class="logo" onclick="scrollTo({top:0,behavior:'smooth'})" aria-label="AthleScan AI, back to top"><svg viewBox="0 0 60 40" width="52" height="35" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff6b75"/><stop offset="1" stop-color="#b3121f"/></linearGradient></defs><g transform="skewX(-14) translate(16 0)"><path d="M0 38 L17.5 2 H26 L43 38 H34.5 L21.8 10.5 L8.5 38 Z" fill="url(#lg)"/><path d="M14.5 27 H28.7 L27.6 31 H13.4 Z" fill="#ff6b75"/><path d="M-6 30 H1.5 M-3 34.5 H0.5" stroke="#ff6b75" stroke-width="1.8" stroke-linecap="round"/></g></svg><span class="wm">ATHLESCAN</span></button><nav class="tabs" aria-label="Sections"><button id="t-analyze" class="on" onclick="tab('analyze')">Analyze</button><button id="t-how" onclick="tab('how')">About</button></nav></div>
+<div class="top"><button class="logo" onclick="scrollTo({top:0,behavior:'smooth'})" aria-label="AthleScan AI, back to top"><svg viewBox="0 0 60 40" width="52" height="35" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff6b75"/><stop offset="1" stop-color="#b3121f"/></linearGradient></defs><g transform="skewX(-14) translate(16 0)"><path d="M0 38 L17.5 2 H26 L43 38 H34.5 L21.8 10.5 L8.5 38 Z" fill="url(#lg)"/><path d="M14.5 27 H28.7 L27.6 31 H13.4 Z" fill="#ff6b75"/><path d="M-6 30 H1.5 M-3 34.5 H0.5" stroke="#ff6b75" stroke-width="1.8" stroke-linecap="round"/></g></svg><span class="wm">ATHLESCAN</span></button><nav class="tabs" aria-label="Sections"><button id="t-analyze" class="on" onclick="tab('analyze')">Analyze</button><button id="t-how" onclick="tab('how')">About</button></nav><button class="account-button" id="account-toggle" type="button" aria-expanded="false">Account</button></div><div id="account-panel" class="account-panel hide" aria-label="Account"><p id="account-status">Loading account…</p><p id="account-quota" class="muted"></p><button class="btn" id="account-signin" type="button">Sign in with GitHub</button><button class="btn ghost hide" id="account-signout" type="button">Sign out</button></div>
 <div id="v-analyze" class="v">
 <div class="gal" id="gal" aria-label="Quotes about training smarter, swipe to browse"></div>
 <h1>AthleScan AI</h1>
@@ -92,6 +93,7 @@ ul{margin:6px 0 0;padding-left:20px}.note{font-size:13px;color:var(--mute);margi
 <p class="note">AI feedback is an estimate from a few still frames, not a substitute for a coach. Stop if anything hurts, and check big technique changes with a coach or parent.</p>
 <p class="note" style="margin-top:8px">Created by Kalkin Deshpande · 2026</p>
 </main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 var REF={
 "Basketball shot":["Feet shoulder-width, shooting-side foot slightly forward","Knees bend and drive up into the shot","Elbow under the ball, aligned to the rim","Ball set above the forehead, not behind the head","Full follow-through: wrist snap, fingers down, hold the finish"],
@@ -108,7 +110,17 @@ SP=SP.split(";").map(function(s){var p=s.split(":");return{n:p[0],s:p[1].split("
 var GEN=["Overall technique","Balance & posture","Power / speed","Footwork","Follow-through"];
 var BP="Dance,Ballet,Breakdancing,Gymnastics,Cheerleading,Acrobatics,Trampoline,Diving,Skateboarding,Surfing,Snowboarding,Skiing,Figure Skating,Speed Skating,Roller Skating,Archery,Golf,Bowling,Darts,Billiards,Sport Shooting,Rock Climbing,Bouldering,Yoga,Pilates,Tai Chi,Barre,Horseback Riding,Polo,Stand-Up Paddleboarding,Wakeboarding,Water Skiing,Windsurfing,Kitesurfing,Sailing,Weightlifting,Powerlifting,Strongman,Bodybuilding,Rowing,Running,Track & Field,Cycling,BMX,Motocross,Parkour,Calisthenics,Kettlebell,Capoeira,Aikido,Judo,Karate,Taekwondo,Kung Fu,Fencing,Aerial Silks,Pole Fitness,Curling,Skeleton,Luge,Mountaineering,Disc Golf,Baton Twirling,Color Guard,Jump Rope,Aerobics".split(",");
 function refFor(s){var k=Object.keys(REF).filter(function(k){return k.toLowerCase().indexOf(s.toLowerCase())===0})[0];return k?REF[k]:null}
-function upd(){var b=$("go");b.disabled=!(file&&sport);b.textContent=!sport?"Pick a sport first":!file?"Add a clip first":"Analyze my form"}
+var authClient=null,authUser=null,authReady=false,quotaRemaining=null,quotaRetryAt=null,analysisRunning=false;
+function limitMessage(){return "User limit reached. Try again at "+new Date(quotaRetryAt).toLocaleString()+"."}
+function upd(){var b=$("go");if(quotaRetryAt&&Date.now()>=new Date(quotaRetryAt).getTime()){quotaRetryAt=null;quotaRemaining=null}b.disabled=analysisRunning||!(file&&sport)||!authReady||!authUser||!!quotaRetryAt;b.textContent=quotaRetryAt?limitMessage():!authReady?"Loading account…":!authUser?"Sign in to analyze":!sport?"Pick a sport first":!file?"Add a clip first":"Analyze my form";updateAccountPanel()}
+function updateAccountPanel(){if(!$("account-status"))return;$("account-toggle").textContent=authUser?"Account · "+(authUser.email?authUser.email.split("@")[0]:"Signed in"):"Sign in";$("account-status").textContent=!authReady?"Loading account…":authUser?"Signed in as "+(authUser.email||"GitHub user"):"Sign in with GitHub to analyze your clips.";$("account-quota").textContent=quotaRetryAt?limitMessage():authUser?(quotaRemaining===null?"8 analyses per rolling 24 hours.":quotaRemaining+" of 8 analyses available (rolling 24 hours). "):"Your account gets 8 analyses per rolling 24 hours.";$("account-signin").classList.toggle("hide",!authReady||!!authUser);$("account-signout").classList.toggle("hide",!authUser)}
+async function getToken(){if(!authClient)throw Error("Account service is not ready.");var result=await authClient.auth.getSession();if(result.error)throw result.error;var token=result.data.session&&result.data.session.access_token;if(!token)throw Error("Please sign in with GitHub first.");return token}
+async function apiTask(body){var token=await getToken();var response=await fetch("/.netlify/functions/analyze",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},body:JSON.stringify(body)});var data=await response.json().catch(function(){return {error:"Unexpected server response."}});if(response.status===429&&data.retryAt){quotaRetryAt=data.retryAt;quotaRemaining=0;upd()}if(!response.ok)throw Error(data.error||(response.status===503?"Server is currently experiencing high demand. Please try again later.":"Request failed."));return data}
+$("account-toggle").onclick=function(){var panel=$("account-panel");panel.classList.toggle("hide");$("account-toggle").setAttribute("aria-expanded",String(!panel.classList.contains("hide")))};
+$("account-signin").onclick=async function(){try{if(!authClient)throw Error("Account service is not ready.");var result=await authClient.auth.signInWithOAuth({provider:"github",options:{redirectTo:location.origin+location.pathname}});if(result.error)throw result.error}catch(e){$("account-status").textContent=e.message}};
+$("account-signout").onclick=async function(){if(authClient)await authClient.auth.signOut();authUser=null;quotaRemaining=null;quotaRetryAt=null;upd()};
+(async function(){try{var response=await fetch("/.netlify/functions/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({task:"config"})});var config=await response.json();if(!response.ok)throw Error(config.error||"Account configuration unavailable.");if(!window.supabase)throw Error("Could not load account library.");authClient=window.supabase.createClient(config.supabaseUrl,config.supabaseAnonKey,{auth:{flowType:"pkce",detectSessionInUrl:true,persistSession:true,autoRefreshToken:true}});authClient.auth.onAuthStateChange(function(event,session){authUser=session&&session.user||null;if(!authUser){quotaRemaining=null;quotaRetryAt=null}upd()});var session=await authClient.auth.getSession();if(session.error)throw session.error;authUser=session.data.session&&session.data.session.user||null;authReady=true;upd();if(authUser)refreshQuota()}catch(e){authReady=false;$("account-status").textContent=e.message;$("account-quota").textContent="Check your Netlify Supabase environment variables.";$("go").textContent="Account service unavailable"}})();
+async function refreshQuota(){try{var data=await apiTask({task:"status"});quotaRemaining=data.remaining;if(data.retryAt&&data.remaining===0)quotaRetryAt=data.retryAt;upd()}catch(e){console.warn("Could not refresh quota:",e)}}
 function lst(){var q=$("q").value.trim().toLowerCase();sp.textContent="";var m=SP.filter(function(x){return x.n.toLowerCase().indexOf(q)>-1}),ex=false;
 m.forEach(function(x){if(x.n.toLowerCase()===q)ex=true;var b=document.createElement("button");b.className="chip";b.textContent=x.n;b.setAttribute("aria-pressed",x.n===sport);b.onclick=function(){choose(x.n,x.s)};sp.appendChild(b)});
 if(q&&!ex){var c=document.createElement("button");c.className="chip s";var nm=$("q").value.trim();c.textContent="Use “"+nm+"” as my sport";c.onclick=function(){choose(nm,GEN)};sp.appendChild(c)}}
@@ -143,9 +155,10 @@ var o={high:0,medium:1,low:2},all=(a.fixes||[]).concat(g).sort(function(p,q){ret
 var sc=Math.round(((a.score||0)+(b.score||0))/((a.score&&b.score)?2:1));
 return {action:(a.action&&b.action&&a.action!==b.action)?a.action+" / "+b.action:(a.action||b.action||""),summary:[a.summary,b.summary].filter(Boolean).join(" "),score:sc,strengths:(a.strengths||[]).concat(b.strengths||[]).slice(0,4),fixes:all}}
 $("go").onclick=async function(){
-$("go").disabled=true;$("out").classList.add("hide");$("busy").classList.remove("hide");$("msg").textContent="Grabbing key frames…";$("pb").style.width="5%";
+analysisRunning=true;upd();$("out").classList.add("hide");$("busy").classList.remove("hide");$("msg").textContent="Grabbing key frames…";$("pb").style.width="5%";
 try{
 var per=3;var fr=await frames(per*2);
+$("msg").textContent="Checking your analysis limit…";var reserved=await apiTask({task:"reserve"});var reservationId=reserved.reservationId;quotaRemaining=reserved.remaining;upd();
 var A=fr.slice(0,per),B=fr.slice(per);
 async function sendAnalysis(partFrames,part,prior){
   var images=await Promise.all(partFrames.map(function(f){return new Promise(function(resolve,reject){
@@ -153,15 +166,7 @@ async function sendAnalysis(partFrames,part,prior){
     reader.onerror=function(){reject(new Error("Could not prepare a video frame."))};
     reader.readAsDataURL(f.blob)
   })}));
-  var response=await fetch("/.netlify/functions/analyze",{
-    method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({task:"analyze",prompt:mk(partFrames,part,prior),images:images})
-  });
-  if(response.status===503){
-    throw new Error("Server is currently experiencing high demand. Please try again later.");
-  }
-  var data=await response.json();
-  if(!response.ok)throw new Error(data.error||"AI analysis request failed.");
+  var data=await apiTask({task:"analyze",reservationId:reservationId,prompt:mk(partFrames,part,prior),images:images});
   return data.result;
 }
 $("msg").textContent="Analyzing the first half of your clip…";$("pb").style.width="45%";
@@ -170,14 +175,14 @@ $("msg").textContent="Analyzing the second half…";$("pb").style.width="80%";
 var prior=(r1.fixes||[]).map(function(x){return (x.area||"")+": "+(x.issue||"")}).join(" | ");
 var r2=await sendAnalysis(B,"second",prior);
 var r=merge(r1,r2,per);
-render(r,fr)}catch(e){$("msg").textContent=(e&&e.message)||"Something went wrong. Try a shorter clip.";$("pb").style.width="0";$("go").disabled=false;return}
-$("busy").classList.add("hide");$("go").disabled=false};
+render(r,fr)}catch(e){$("msg").textContent=(e&&e.message)||"Something went wrong. Try a shorter clip.";$("pb").style.width="0";analysisRunning=false;upd();return}
+$("busy").classList.add("hide");analysisRunning=false;upd()};
 
 async function mkPlan(btn){var L=window.LAST,pc=$("plan");btn.disabled=true;btn.textContent="Building your plan…";pc.textContent="";
 try{var fx=(L.r.fixes||[]).map(function(x,i){return (i+1)+". "+x.area+": "+x.issue+" (cue: "+x.fix+")"}).join("\n");
 if(!fx)throw new Error("There are no fixes to build a plan from. Try another clip.");
 var p="You are a youth sports coach. Build a safe, simple 5-day practice plan (10-15 minutes per day, no special equipment where possible) for a young athlete doing: "+L.sport+(L.r.action?" ("+L.r.action+")":"")+". Their top fixes:\n"+fx+"\n\nEach day has a short focus and 2-3 drills with reps or time and one plain-language how-to sentence. Begin every day with a quick warm-up. Reply ONLY with JSON, no markdown: {\"intro\":\"1 sentence\",\"days\":[{\"day\":\"Day 1\",\"focus\":\"...\",\"drills\":[{\"name\":\"...\",\"reps\":\"...\",\"how\":\"...\"}]}],\"tip\":\"1 sentence on rest and safety\"}";
-var response=await fetch("/.netlify/functions/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({task:"plan",prompt:p})});var data=await response.json();if(!response.ok)throw new Error(data.error||"Practice plan request failed.");var r=data.result;var c=el("div","card");c.appendChild(el("h2",null,"Your 5-day practice plan"));c.appendChild(el("p",null,r.intro||""));
+var data=await apiTask({task:"plan",prompt:p});var r=data.result;var c=el("div","card");c.appendChild(el("h2",null,"Your 5-day practice plan"));c.appendChild(el("p",null,r.intro||""));
 (r.days||[]).forEach(function(d){var w=el("div","fix low");w.appendChild(el("div","tag",(d.day||"")+" · "+(d.focus||"")));var u=el("ul");(d.drills||[]).forEach(function(k){var li=el("li");li.appendChild(el("b",null,(k.name||"")+" – "+(k.reps||"")+". "));li.appendChild(document.createTextNode(k.how||""));u.appendChild(li)});w.appendChild(u);c.appendChild(w)});
 c.appendChild(el("p","note",r.tip||"Rest if anything hurts, and check with a coach."));pc.appendChild(c);pc.scrollIntoView({behavior:"smooth"});btn.textContent="Rebuild practice plan"}
 catch(e){pc.appendChild(el("p","note",(e&&e.message)||"Couldn’t build a plan. Try again."));btn.textContent="Build my practice plan"}
