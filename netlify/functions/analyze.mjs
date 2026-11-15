@@ -4,13 +4,6 @@ export default async (request) => {
     return json({ error: "Use POST for this endpoint." }, 405);
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return json({
-      error: "The AI service is not configured yet. Ask the site administrator to add GEMINI_API_KEY in Netlify."
-    }, 500);
-  }
-
   let body;
   try {
     body = await request.json();
@@ -18,19 +11,175 @@ export default async (request) => {
     return json({ error: "The request was not valid JSON." }, 400);
   }
 
-  const { task, prompt, images } = body || {};
+  const { task, prompt, images, reservationId } = body || {};
+  const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
+  const anonKey = process.env.SUPABASE_ANON_KEY;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!["analyze", "plan"].includes(task) ||
-      typeof prompt !== "string" ||
-      !prompt.trim()) {
-    return json({ error: "The request is missing its task or prompt." }, 400);
+  if (!supabaseUrl || !anonKey || !serviceKey) {
+    return json({ error: "Supabase is not configured in Netlify." }, 500);
+  }
+
+  if (task === "config") {
+    return json({ supabaseUrl, supabaseAnonKey: anonKey });
+  }
+
+  if (!["status", "reserve", "analyze", "plan"].includes(task)) {
+    return json({ error: "Unknown task." }, 400);
+  }
+
+  const bearer = request.headers.get("authorization") || "";
+
+  if (!/^Bearer \S+$/i.test(bearer)) {
+    return json({ error: "Please sign in with GitHub first." }, 401);
+  }
+
+  let user;
+  try {
+    const auth = await fetch(supabaseUrl + "/auth/v1/user", {
+      headers: {
+        apikey: anonKey,
+        Authorization: bearer
+      }
+    });
+
+    if (!auth.ok) {
+      return json({
+        error: "Your sign-in expired. Please sign in again."
+      }, 401);
+    }
+
+    user = await auth.json();
+
+    if (!user?.id) {
+      return json({ error: "Could not verify your account." }, 401);
+    }
+  } catch (e) {
+    console.error("Supabase authentication failed:", e);
+    return json({
+      error: "Could not verify your account right now."
+    }, 502);
+  }
+
+  const serviceHeaders = {
+    apikey: serviceKey,
+    Authorization: "Bearer " + serviceKey,
+    "Content-Type": "application/json"
+  };
+
+  if (task === "status") {
+    try {
+      const since = new Date(Date.now() - 86400000).toISOString();
+
+      const url =
+        supabaseUrl +
+        "/rest/v1/analysis_usage?user_id=eq." +
+        encodeURIComponent(user.id) +
+        "&created_at=gt." +
+        encodeURIComponent(since) +
+        "&select=created_at&order=created_at.asc&limit=8";
+
+      const r = await fetch(url, { headers: serviceHeaders });
+
+      if (!r.ok) {
+        throw Error("Usage lookup failed: " + r.status);
+      }
+
+      const rows = await r.json();
+      const remaining = Math.max(0, 8 - rows.length);
+
+      return json({
+        remaining,
+        retryAt: remaining === 0
+          ? new Date(Date.parse(rows[0].created_at) + 86400000).toISOString()
+          : null
+      });
+    } catch (e) {
+      console.error(e);
+      return json({
+        error: "Could not check your analysis limit."
+      }, 502);
+    }
+  }
+
+  if (task === "reserve") {
+    try {
+      const r = await fetch(
+        supabaseUrl + "/rest/v1/rpc/reserve_analysis_use",
+        {
+          method: "POST",
+          headers: serviceHeaders,
+          body: JSON.stringify({ p_user_id: user.id })
+        }
+      );
+
+      if (!r.ok) {
+        throw Error(
+          "Reservation failed: " +
+          r.status + " " +
+          (await r.text()).slice(0, 300)
+        );
+      }
+
+      const data = await r.json();
+
+      if (!data.allowed) {
+        return json({
+          error: "User limit reached. Try again at " +
+            new Date(data.retry_at).toLocaleString() + ".",
+          retryAt: data.retry_at,
+          remaining: 0
+        }, 429);
+      }
+
+      return json({
+        reservationId: data.reservation_id,
+        remaining: data.remaining
+      });
+    } catch (e) {
+      console.error(e);
+      return json({
+        error: "Could not reserve an analysis. Please try again."
+      }, 502);
+    }
+  }
+
+  if (typeof prompt !== "string" || !prompt.trim()) {
+    return json({
+      error: "The request is missing its prompt."
+    }, 400);
+  }
+
+  if (task === "analyze") {
+    if (
+      typeof reservationId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
+    ) {
+      return json({
+        error: "Start a new analysis to obtain a valid reservation."
+      }, 403);
+    }
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    return json({
+      error: "The AI service is not configured yet. Ask the site administrator to add GEMINI_API_KEY in Netlify."
+    }, 500);
   }
 
   const parts = [{ text: prompt.slice(0, 18000) }];
 
   if (task === "analyze") {
-    if (!Array.isArray(images) || images.length < 1 || images.length > 3) {
-      return json({ error: "Each analysis request must contain 1–3 frames." }, 400);
+    if (
+      !Array.isArray(images) ||
+      images.length < 1 ||
+      images.length > 3
+    ) {
+      return json({
+        error: "Each analysis request must contain 1–3 frames."
+      }, 400);
     }
 
     for (const image of images) {
@@ -45,12 +194,49 @@ export default async (request) => {
       }
 
       const data = image.slice(image.indexOf(",") + 1);
+
       parts.push({
         inlineData: {
           mimeType: "image/jpeg",
           data
         }
       });
+    }
+  }
+
+  if (task === "analyze") {
+    // Atomically consume one of two frame batches.
+    try {
+      const r = await fetch(
+        supabaseUrl + "/rest/v1/rpc/consume_analysis_request",
+        {
+          method: "POST",
+          headers: serviceHeaders,
+          body: JSON.stringify({
+            p_reservation_id: reservationId,
+            p_user_id: user.id
+          })
+        }
+      );
+
+      if (!r.ok) {
+        throw Error(
+          "Consumption failed: " +
+          r.status + " " +
+          (await r.text()).slice(0, 300)
+        );
+      }
+
+      if (await r.json() !== true) {
+        return json({
+          error: "This analysis reservation is expired or already used. Start a new analysis."
+        }, 403);
+      }
+    } catch (e) {
+      console.error(e);
+      return json({
+        error: "Could not validate your analysis reservation."
+      }, 502);
     }
   }
 
@@ -109,10 +295,14 @@ export default async (request) => {
     }
 
     let parsed;
+
     try {
       parsed = JSON.parse(text);
     } catch {
-      console.error("Gemini response was not valid JSON:", text.slice(0, 500));
+      console.error(
+        "Gemini response was not valid JSON:",
+        text.slice(0, 500)
+      );
 
       return json({
         error: "The AI response could not be read. Please try again."
