@@ -49,11 +49,14 @@ export default async (request) => {
         },
         body: JSON.stringify({
           contents: [{ role: "user", parts }],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: task === "plan" ? 2200 : 3000,
-            responseMimeType: "application/json"
-          }
+generationConfig: {
+  temperature: 0.2,
+  thinkingConfig: {
+    thinkingLevel: "LOW"
+  },
+  maxOutputTokens: task === "plan" ? 1800 : 2000,
+  responseMimeType: "application/json"
+}
         })
       }
     );
