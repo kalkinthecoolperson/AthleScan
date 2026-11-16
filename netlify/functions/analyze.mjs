@@ -1,3 +1,4 @@
+
 // Netlify Function: keeps the Google Gemini API key on the server.
 export default async (request) => {
   if (request.method !== "POST") {
@@ -17,96 +18,66 @@ export default async (request) => {
   const firebaseProject = "kalkin-experiments";
   if (!supabaseUrl || !serviceKey) return json({ error: "Supabase is not configured in Netlify." }, 500);
   if (!["status", "reserve", "analyze", "plan"].includes(task)) return json({ error: "Unknown task." }, 400);
+  // Google users use their verified Firebase UID. Guests receive a signed,
+  // HttpOnly, same-site cookie; the cookie never contains a Supabase credential.
   const bearer = request.headers.get("authorization") || "";
-  if (!/^Bearer \S+$/i.test(bearer)) return json({ error: "Please sign in with Google first." }, 401);
-  let user;
-  try { user = await verifyFirebaseToken(bearer.replace(/^Bearer /i, ""), firebaseProject); }
-  catch (e) { console.error("Firebase authentication failed:", e.message); return json({ error: "Your Google sign-in is invalid or expired. Please sign in again." }, 401); }
+  let userId, guestCookie = null;
+  if (/^Bearer \S+$/i.test(bearer)) {
+    try {
+      const user = await verifyFirebaseToken(bearer.replace(/^Bearer /i, ""), firebaseProject);
+      userId = "firebase:" + user.uid;
+    } catch (e) {
+      console.error("Firebase authentication failed:", e.message);
+      return json({ error: "Your Google sign-in is invalid or expired. Please sign in again." }, 401);
+    }
+  } else {
+    // A cross-site POST must not mint or spend someone else's guest identity.
+    const origin = request.headers.get("origin");
+    if (origin && new URL(origin).origin !== new URL(request.url).origin) {
+      return json({ error: "Invalid request origin." }, 403);
+    }
+    const secret = serviceKey;
+    const cookies = request.headers.get("cookie") || "";
+    const match = cookies.match(/(?:^|;\s*)athlescan_guest=([^;]+)/);
+    const existing = match ? await verifyGuestCookie(decodeURIComponent(match[1]), secret) : null;
+    const guestId = existing || crypto.randomUUID();
+    userId = "guest:" + guestId;
+    if (!existing) {
+      const value = await signGuestCookie(guestId, secret);
+      guestCookie = "athlescan_guest=" + encodeURIComponent(value) + "; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax";
+    }
+  }
+  const respond = (data, code = 200) => json(data, code, guestCookie);
   const serviceHeaders = {
     apikey: serviceKey,
     Authorization: "Bearer " + serviceKey,
     "Content-Type": "application/json"
   };
 
-  if (task === "status") {
+  if (task === "status" || task === "reserve") {
     try {
-      const since = new Date(Date.now() - 86400000).toISOString();
-
-      const url =
-        supabaseUrl +
-        "/rest/v1/firebase_analysis_usage?firebase_uid=eq." +
-        encodeURIComponent(user.uid) +
-        "&created_at=gt." +
-        encodeURIComponent(since) +
-        "&select=created_at&order=created_at.asc&limit=8";
-
-      const r = await fetch(url, { headers: serviceHeaders });
-
-      if (!r.ok) {
-        throw Error("Usage lookup failed: " + r.status);
-      }
-
-      const rows = await r.json();
-      const remaining = Math.max(0, 8 - rows.length);
-
-      return json({
-        remaining,
-        retryAt: remaining === 0
-          ? new Date(Date.parse(rows[0].created_at) + 86400000).toISOString()
-          : null
+      const rpc = task === "status" ? "athlescan_v2_status" : "athlescan_v2_reserve";
+      const r = await fetch(supabaseUrl + "/rest/v1/rpc/" + rpc, {
+        method: "POST", headers: serviceHeaders,
+        body: JSON.stringify({ p_user_id: userId })
       });
-    } catch (e) {
-      console.error(e);
-      return json({
-        error: "Could not check your analysis limit."
-      }, 502);
-    }
-  }
-
-  if (task === "reserve") {
-    try {
-      const r = await fetch(
-        supabaseUrl + "/rest/v1/rpc/reserve_firebase_analysis_use",
-        {
-          method: "POST",
-          headers: serviceHeaders,
-          body: JSON.stringify({ p_firebase_uid: user.uid })
-        }
-      );
-
-      if (!r.ok) {
-        throw Error(
-          "Reservation failed: " +
-          r.status + " " +
-          (await r.text()).slice(0, 300)
-        );
-      }
-
+      if (!r.ok) throw Error("Usage RPC failed: " + r.status + " " + (await r.text()).slice(0, 300));
       const data = await r.json();
-
-      if (!data.allowed) {
-        return json({
-          error: "User limit reached. Try again at " +
-            new Date(data.retry_at).toLocaleString() + ".",
-          retryAt: data.retry_at,
-          remaining: 0
-        }, 429);
-      }
-
-      return json({
-        reservationId: data.reservation_id,
-        remaining: data.remaining
-      });
+      if (task === "status") return respond({ remaining: data.remaining, retryAt: data.retry_at });
+      if (!data.allowed) return respond({
+        error: "User limit reached. Try again at " + new Date(data.retry_at).toLocaleString() + ".",
+        retryAt: data.retry_at, remaining: 0
+      }, 429);
+      if (typeof data.reservation_id !== "string") throw Error("Reservation ID missing from RPC");
+      return respond({ reservationId: data.reservation_id, remaining: data.remaining });
     } catch (e) {
       console.error(e);
-      return json({
-        error: "Could not reserve an analysis. Please try again."
-      }, 502);
+      return respond({ error: "Could not " + (task === "status" ? "check" : "reserve") + " your analysis limit. Please try again." }, 502);
     }
   }
 
   if (typeof prompt !== "string" || !prompt.trim()) {
-    return json({
+    return respond({
       error: "The request is missing its prompt."
     }, 400);
   }
@@ -114,9 +85,9 @@ export default async (request) => {
   if (task === "analyze") {
     if (
       typeof reservationId !== "string" ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
     ) {
-      return json({
+      return respond({
         error: "Start a new analysis to obtain a valid reservation."
       }, 403);
     }
@@ -125,7 +96,7 @@ export default async (request) => {
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    return json({
+    return respond({
       error: "The AI service is not configured yet. Ask the site administrator to add GEMINI_API_KEY in Netlify."
     }, 500);
   }
@@ -138,7 +109,7 @@ export default async (request) => {
       images.length < 1 ||
       images.length > 3
     ) {
-      return json({
+      return respond({
         error: "Each analysis request must contain 1–3 frames."
       }, 400);
     }
@@ -149,7 +120,7 @@ export default async (request) => {
         !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(image) ||
         image.length > 2_000_000
       ) {
-        return json({
+        return respond({
           error: "A video frame was invalid or too large. Try a shorter or smaller clip."
         }, 400);
       }
@@ -169,13 +140,13 @@ export default async (request) => {
     // Atomically consume one of two frame batches.
     try {
       const r = await fetch(
-        supabaseUrl + "/rest/v1/rpc/consume_firebase_analysis_request",
+        supabaseUrl + "/rest/v1/rpc/athlescan_v2_consume",
         {
           method: "POST",
           headers: serviceHeaders,
           body: JSON.stringify({
             p_reservation_id: reservationId,
-            p_firebase_uid: user.uid
+            p_user_id: userId
           })
         }
       );
@@ -189,13 +160,13 @@ export default async (request) => {
       }
 
       if (await r.json() !== true) {
-        return json({
+        return respond({
           error: "This analysis reservation is expired or already used. Start a new analysis."
         }, 403);
       }
     } catch (e) {
       console.error(e);
-      return json({
+      return respond({
         error: "Could not validate your analysis reservation."
       }, 502);
     }
@@ -229,12 +200,12 @@ export default async (request) => {
       console.error("Gemini API error:", result);
 
       if (upstream.status === 503) {
-        return json({
+        return respond({
           error: "Server is currently experiencing high demand. Please try again later."
         }, 503);
       }
 
-      return json({
+      return respond({
         error: "Gemini returned an error. Please try again later or ask the site administrator to check the Netlify function logs."
       }, 502);
     }
@@ -250,7 +221,7 @@ export default async (request) => {
         result?.promptFeedback || result?.candidates?.[0]?.finishReason
       );
 
-      return json({
+      return respond({
         error: "Gemini returned an empty response. Please try again."
       }, 502);
     }
@@ -265,29 +236,26 @@ export default async (request) => {
         text.slice(0, 500)
       );
 
-      return json({
+      return respond({
         error: "The AI response could not be read. Please try again."
       }, 502);
     }
 
-    return json({ result: parsed }, 200);
+    return respond({ result: parsed }, 200);
 
   } catch (error) {
     console.error("Gemini request failed:", error);
 
-    return json({
+    return respond({
       error: "Could not connect to Gemini. Please try again."
     }, 502);
   }
 };
 
-function json(data, statusCode = 200) {
-  return new Response(JSON.stringify(data), {
-    status: statusCode,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8"
-    }
-  });
+function json(data, statusCode = 200, cookie = null) {
+  const headers = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
+  if (cookie) headers["Set-Cookie"] = cookie;
+  return new Response(JSON.stringify(data), { status: statusCode, headers });
 }
 
 // Verify Firebase ID tokens locally using Google's published signing keys.
@@ -318,4 +286,24 @@ async function verifyFirebaseToken(token, projectId) {
   const valid = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, fromBase64url(pieces[2]), new TextEncoder().encode(pieces[0] + "." + pieces[1]));
   if (!valid) throw Error("Invalid Firebase signature");
   return { uid: claims.sub, email: claims.email || null };
+}
+
+// The signature prevents clients from choosing arbitrary guest IDs.
+async function guestHmac(value, secret) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const bytes = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value)));
+  return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+}
+async function signGuestCookie(id, secret) {
+  return id + "." + await guestHmac(id, secret);
+}
+async function verifyGuestCookie(value, secret) {
+  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
+  if (!m) return null;
+  const expected = await guestHmac(m[1], secret);
+  // Constant-time compare of two fixed-length hexadecimal signatures.
+  let difference = 0;
+  for (let i = 0; i < 64; i++) difference |= expected.charCodeAt(i) ^ m[2].charCodeAt(i);
+  return difference === 0 ? m[1] : null;
 }
