@@ -298,12 +298,18 @@ async function guestHmac(value, secret) {
 async function signGuestCookie(id, secret) {
   return id + "." + await guestHmac(id, secret);
 }
+
 async function verifyGuestCookie(value, secret) {
-  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
+  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
   if (!m) return null;
+
   const expected = await guestHmac(m[1], secret);
+
   // Constant-time compare of two fixed-length hexadecimal signatures.
   let difference = 0;
-  for (let i = 0; i < 64; i++) difference |= expected.charCodeAt(i) ^ m[2].charCodeAt(i);
+  for (let i = 0; i < 64; i++) {
+    difference |= expected.charCodeAt(i) ^ m[2].charCodeAt(i);
+  }
+
   return difference === 0 ? m[1] : null;
 }
