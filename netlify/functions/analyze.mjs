@@ -13,54 +13,15 @@ export default async (request) => {
 
   const { task, prompt, images, reservationId } = body || {};
   const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
-  const anonKey = process.env.SUPABASE_ANON_KEY;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !anonKey || !serviceKey) {
-    return json({ error: "Supabase is not configured in Netlify." }, 500);
-  }
-
-  if (task === "config") {
-    return json({ supabaseUrl, supabaseAnonKey: anonKey });
-  }
-
-  if (!["status", "reserve", "analyze", "plan"].includes(task)) {
-    return json({ error: "Unknown task." }, 400);
-  }
-
+  const firebaseProject = "kalkin-experiments";
+  if (!supabaseUrl || !serviceKey) return json({ error: "Supabase is not configured in Netlify." }, 500);
+  if (!["status", "reserve", "analyze", "plan"].includes(task)) return json({ error: "Unknown task." }, 400);
   const bearer = request.headers.get("authorization") || "";
-
-  if (!/^Bearer \S+$/i.test(bearer)) {
-    return json({ error: "Please sign in with GitHub first." }, 401);
-  }
-
+  if (!/^Bearer \S+$/i.test(bearer)) return json({ error: "Please sign in with Google first." }, 401);
   let user;
-  try {
-    const auth = await fetch(supabaseUrl + "/auth/v1/user", {
-      headers: {
-        apikey: anonKey,
-        Authorization: bearer
-      }
-    });
-
-    if (!auth.ok) {
-      return json({
-        error: "Your sign-in expired. Please sign in again."
-      }, 401);
-    }
-
-    user = await auth.json();
-
-    if (!user?.id) {
-      return json({ error: "Could not verify your account." }, 401);
-    }
-  } catch (e) {
-    console.error("Supabase authentication failed:", e);
-    return json({
-      error: "Could not verify your account right now."
-    }, 502);
-  }
-
+  try { user = await verifyFirebaseToken(bearer.replace(/^Bearer /i, ""), firebaseProject); }
+  catch (e) { console.error("Firebase authentication failed:", e.message); return json({ error: "Your Google sign-in is invalid or expired. Please sign in again." }, 401); }
   const serviceHeaders = {
     apikey: serviceKey,
     Authorization: "Bearer " + serviceKey,
@@ -73,8 +34,8 @@ export default async (request) => {
 
       const url =
         supabaseUrl +
-        "/rest/v1/analysis_usage?user_id=eq." +
-        encodeURIComponent(user.id) +
+        "/rest/v1/firebase_analysis_usage?firebase_uid=eq." +
+        encodeURIComponent(user.uid) +
         "&created_at=gt." +
         encodeURIComponent(since) +
         "&select=created_at&order=created_at.asc&limit=8";
@@ -105,11 +66,11 @@ export default async (request) => {
   if (task === "reserve") {
     try {
       const r = await fetch(
-        supabaseUrl + "/rest/v1/rpc/reserve_analysis_use",
+        supabaseUrl + "/rest/v1/rpc/reserve_firebase_analysis_use",
         {
           method: "POST",
           headers: serviceHeaders,
-          body: JSON.stringify({ p_user_id: user.id })
+          body: JSON.stringify({ p_firebase_uid: user.uid })
         }
       );
 
@@ -153,7 +114,7 @@ export default async (request) => {
   if (task === "analyze") {
     if (
       typeof reservationId !== "string" ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
     ) {
       return json({
         error: "Start a new analysis to obtain a valid reservation."
@@ -208,13 +169,13 @@ export default async (request) => {
     // Atomically consume one of two frame batches.
     try {
       const r = await fetch(
-        supabaseUrl + "/rest/v1/rpc/consume_analysis_request",
+        supabaseUrl + "/rest/v1/rpc/consume_firebase_analysis_request",
         {
           method: "POST",
           headers: serviceHeaders,
           body: JSON.stringify({
             p_reservation_id: reservationId,
-            p_user_id: user.id
+            p_firebase_uid: user.uid
           })
         }
       );
@@ -327,4 +288,34 @@ function json(data, statusCode = 200) {
       "Content-Type": "application/json; charset=utf-8"
     }
   });
+}
+
+// Verify Firebase ID tokens locally using Google's published signing keys.
+// The Firebase web API key is not a signing key and must not be trusted for verification.
+async function verifyFirebaseToken(token, projectId) {
+  const pieces = token.split(".");
+  if (pieces.length !== 3) throw Error("Invalid JWT format");
+  const decode = (str) => JSON.parse(new TextDecoder().decode(
+    Uint8Array.from(atob(str.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0))));
+  const header = decode(pieces[0]);
+  const claims = decode(pieces[1]);
+  const now = Math.floor(Date.now() / 1000);
+  if (header.alg !== "RS256" || !header.kid || claims.aud !== projectId ||
+      claims.iss !== "https://securetoken.google.com/" + projectId ||
+      typeof claims.sub !== "string" || !claims.sub || claims.sub.length > 128 ||
+      !Number.isFinite(claims.exp) || claims.exp <= now ||
+      !Number.isFinite(claims.iat) || claims.iat > now + 60 ||
+      !Number.isFinite(claims.auth_time) || claims.auth_time > now + 60) {
+    throw Error("Invalid Firebase token claims");
+  }
+  const response = await fetch("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com");
+  if (!response.ok) throw Error("Could not retrieve Firebase signing keys");
+  const { keys } = await response.json();
+  const jwk = keys.find(k => k.kid === header.kid && k.kty === "RSA");
+  if (!jwk) throw Error("Unknown Firebase signing key");
+  const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+  const fromBase64url = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+  const valid = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, fromBase64url(pieces[2]), new TextEncoder().encode(pieces[0] + "." + pieces[1]));
+  if (!valid) throw Error("Invalid Firebase signature");
+  return { uid: claims.sub, email: claims.email || null };
 }
