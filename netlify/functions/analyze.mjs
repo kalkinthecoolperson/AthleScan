@@ -15,7 +15,7 @@ export default async (request) => {
   const { task, prompt, images, reservationId } = body || {};
   const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const firebaseProject = "kalkin-experiments";
+  const firebaseProject = "athlescan-auth";
   if (!supabaseUrl || !serviceKey) return json({ error: "Supabase is not configured in Netlify." }, 500);
   if (!["status", "reserve", "analyze", "plan"].includes(task)) return json({ error: "Unknown task." }, 400);
   // Google users use their verified Firebase UID. Guests receive a signed,
@@ -85,7 +85,7 @@ export default async (request) => {
   if (task === "analyze") {
     if (
       typeof reservationId !== "string" ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
     ) {
       return respond({
         error: "Start a new analysis to obtain a valid reservation."
@@ -299,7 +299,7 @@ async function signGuestCookie(id, secret) {
   return id + "." + await guestHmac(id, secret);
 }
 async function verifyGuestCookie(value, secret) {
-  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
+  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
   if (!m) return null;
   const expected = await guestHmac(m[1], secret);
   // Constant-time compare of two fixed-length hexadecimal signatures.
