@@ -38,6 +38,105 @@ video{width:100%;border-radius:12px;margin-top:12px;background:#000;max-height:5
 ul{margin:6px 0 0;padding-left:20px}.note{font-size:13px;color:var(--mute);margin-top:18px}
 .strip{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}.strip img{height:64px;border-radius:8px;flex:none}
 .account-button{margin-left:auto;background:transparent;border:1px solid var(--line);border-radius:12px;color:var(--ink);padding:9px 12px;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}.account-panel{position:fixed;z-index:30;right:clamp(12px,4vw,48px);top:76px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;width:min(350px,calc(100vw - 24px));box-shadow:0 15px 45px #000b}.account-panel button{margin-top:10px}.account-panel p{overflow-wrap:anywhere;margin:8px 0}.account-panel .btn{padding:10px;min-height:40px}.account-panel .muted{color:var(--mute);font-size:13px}@media(max-width:480px){.account-button{font-size:12px;padding:8px}.logo .wm{font-size:10px;letter-spacing:.1em}.top{gap:5px}}
+
+/* AthleScan — refined interface, November 2026 */
+:root{--bg:#0b0d10;--card:#14171b;--ink:#f4f5f6;--mute:#9da5ae;--line:#2b3037;--acc:#e7464c;--warn:#d58b53;--mid:#d5ad63;--bad:#f06470}
+body{background:#0b0d10;color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:-.008em}
+main{max-width:1160px;margin:0 auto;padding:0 32px 64px}
+.top{width:auto;margin:0 -32px;padding:18px 32px;gap:36px;border-bottom:1px solid #282d34;background:rgba(11,13,16,.97);backdrop-filter:blur(16px)}
+.logo .wm{font-size:15px;letter-spacing:.14em;font-style:normal;font-weight:850}
+.logo svg{width:43px;height:30px}
+.tabs{gap:18px}.tabs button{padding:9px 3px;font-size:13px;font-weight:650;letter-spacing:.01em}
+.tabs button.on{border-bottom-color:var(--acc)}
+.account-button{border:1px solid #353a42;border-radius:8px;padding:10px 15px;font-size:12px;font-weight:650}
+.account-panel{background:#191d22;border:1px solid #343a43;border-radius:12px}
+.v{max-width:960px;margin:0 auto}
+#v-analyze>h1{font-size:clamp(32px,5vw,54px);line-height:1.06;letter-spacing:-.055em;font-weight:780;margin:36px 0 12px}
+#v-analyze>p.sub{max-width:610px;font-size:15px;line-height:1.7;margin-bottom:34px;color:#aab1ba}
+.gal{width:auto;margin:26px 0 0;border:1px solid #733039;border-radius:12px;background:#14181d;scrollbar-width:none}
+.qs{min-height:115px;padding:20px 28px;gap:8px}
+.qs p{font-size:clamp(16px,2.4vw,20px);font-style:normal;font-weight:550;line-height:1.45;max-width:690px}
+.qs span{font-size:10px;color:#e39a9e;letter-spacing:.13em}
+.start{border-left:0;padding-left:0;font-size:20px;letter-spacing:-.035em;font-weight:750;font-style:normal;margin:0 0 16px}
+.card{background:var(--card);border:1px solid #772c35;border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:none}
+.card h2{font-size:12px;letter-spacing:.09em;color:#d5d8dc;font-weight:750;margin-bottom:16px}
+.chips{gap:8px}
+.chip{background:#1b1f24;border:1px solid #6b3038;border-radius:8px;min-height:38px;padding:8px 12px;font-size:13px;font-weight:550}
+.chip[aria-pressed="true"]{background:#532328;border-color:#e7464c;color:#fff}
+.chip.s{font-size:12px;min-height:36px;border-style:solid}
+input[type=search],input[type=text],textarea{background:#0e1115;border:1px solid #363c44;border-radius:8px;padding:12px 14px;font-size:14px}
+input[type=search]{margin-bottom:16px}
+textarea{min-height:90px}
+.drop{background:#101419;border:1px dashed #505861;border-radius:10px;padding:32px 20px;font-size:14px;font-weight:650}
+.drop small{font-size:12px;line-height:1.6;max-width:550px;margin:7px auto 0}
+.btn{border-radius:8px;min-height:46px;padding:12px 18px;font-size:14px;font-weight:750;margin-top:14px;transition:background .18s ease,transform .18s ease}
+.btn:hover:not(:disabled){background:#fa5a60;transform:translateY(-1px)}
+.btn.ghost:hover:not(:disabled){background:#242930}
+.note,.ref{color:#a5adb6;font-size:12px;line-height:1.7}
+#out{padding-top:12px}
+#out .score{align-items:flex-start;gap:20px}
+#out .score .n{font-size:60px;letter-spacing:-.07em}
+#out .fix{border-left-width:3px;padding:0 0 0 17px;margin:22px 0}
+#out .fix h3{font-size:15px;line-height:1.5;font-weight:650}
+.tag{font-size:10px;letter-spacing:.08em}
+.fr{max-width:720px;border-radius:8px}
+.strip{margin-top:18px}
+.strip img{height:78px;border:1px solid #3a4048}
+.fix .do{background:#24282e;border-radius:8px;padding:13px}
+#v-how{padding-top:34px}
+.about{width:auto;margin:0 0 35px;border:1px solid #9a3540;border-radius:12px;background:#15191e}
+.about .in{padding:30px 34px}
+.about h2.start{font-size:28px;letter-spacing:-.045em;margin-bottom:18px}
+.about p{color:#b5bcc4;font-size:14px;line-height:1.85;max-width:850px}
+.steps:before{display:none}
+.steps>p.start{margin-bottom:20px}
+.steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.steps>p.start{grid-column:1/-1}
+.steps>.card{margin:0;min-height:152px;border-color:#772c35}
+.steps>.card h2{font-size:13px;color:#f1f2f3;text-transform:none;letter-spacing:-.01em}
+.steps>.card p{font-size:13px;line-height:1.75;color:#abb3bc}
+#v-how>.btn{max-width:260px;margin-top:26px}
+/* Fade-in for page sections; results stay visible even if observer misses them. */
+.rv{opacity:0;transform:translateY(var(--dy,24px));transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.2,1)}
+.rv.vis{opacity:1;transform:none}
+#out > .card.rv{opacity:1;transform:none}
+@media(max-width:680px){
+ main{padding:0 17px 44px}
+ .top{margin:0 -17px;padding:12px 17px;gap:12px}
+ .logo .wm{font-size:11px;letter-spacing:.08em}
+ .logo svg{width:34px}
+ .tabs{gap:10px}
+ .tabs button{font-size:12px;padding:8px 2px}
+ .account-button{padding:8px 9px;font-size:11px}
+ #v-analyze>h1{margin-top:27px}
+ .gal{margin-top:18px}
+ .card{padding:18px}
+ .about .in{padding:22px}
+ .steps{grid-template-columns:1fr}
+ .steps>.card{min-height:0}
+ #out .score .n{font-size:47px}
+}
+@media(prefers-reduced-motion:reduce){.btn{transition:none}}
+
+
+/* Restore the original full-width quote carousel */
+.gal{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;width:100vw;margin:0 0 18px calc(50% - 50vw);background:linear-gradient(180deg,rgba(230,57,70,.42),rgba(230,57,70,.14) 60%,rgba(230,57,70,0))}
+.gal::-webkit-scrollbar{display:none}
+.qs{flex:0 0 100%;scroll-snap-align:start;padding:28px clamp(20px,6vw,64px);text-align:center;min-height:160px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:12px}
+.qs p{margin:0;font-size:clamp(19px,4.2vw,28px);font-weight:700;font-style:italic;line-height:1.35;max-width:760px}
+.qs span{color:#ffa3ab;font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:13px}
+@media(max-width:680px){.gal{width:100vw;margin:0 0 18px calc(50% - 50vw)}.qs{min-height:160px;padding:28px clamp(20px,6vw,64px)}.qs p{font-size:clamp(19px,4.2vw,28px)}}
+
+/* Quote carousel: centered, narrower box while preserving original styling */
+.gal{width:min(100%,800px);margin:20px auto 22px;border-radius:12px}
+@media(max-width:680px){.gal{width:100%;margin:18px auto 20px}}
+
+/* Subtle red ambient glow radiating from the top-left of the page */
+body{background:#160e12;background-attachment:fixed}
+
+/* Quotes: full-bleed across the viewport, without a surrounding box */
+.gal{width:100vw;max-width:none;margin:20px 0 22px calc(50% - 50vw);border:0;border-radius:0;box-shadow:none}
+@media(max-width:680px){.gal{width:100vw;margin:18px 0 20px calc(50% - 50vw);border:0;border-radius:0}}
 </style>
 </head>
 <body>
