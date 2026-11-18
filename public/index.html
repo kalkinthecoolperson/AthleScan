@@ -262,6 +262,11 @@ html,body{background:#10090c!important;background-image:none!important;backgroun
 @media (max-width: 600px){
   #sports.chips.list{max-height:170px!important;min-height:0!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch}
 }
+.frame-thumb{display:flex;flex-direction:column;gap:4px;flex:none;color:#c6aeb4;font-size:11px;text-align:center}
+.strip .frame-thumb img{height:78px;width:auto;margin:0}
+.phase-row{padding:12px 0;border-bottom:1px solid #70313d}
+.phase-row:last-of-type{border-bottom:0}
+.phase-row p{margin:6px 0 0;font-size:14px}
 </style>
 </head>
 <body>
@@ -392,13 +397,43 @@ var blob=await new Promise(function(r){c.toBlob(r,"image/jpeg",0.72)});
 out.push({t:t,blob:blob,url:c.toDataURL("image/jpeg",0.72)});$("pb").style.width=(10+i*6)+"%"}
 res(out)}})}
 
-function mk(fr,part,prior){var rf=refFor(sport),name=sport;var list=fr.map(function(f,i){return "Frame "+(i+1)+" at "+f.t.toFixed(1)+"s"}).join("; ");
-var prompt="You are an expert youth sports coach and biomechanics analyst. The attached images are "+fr.length+" frames, in order, from the "+part+" half of ONE video of a young athlete performing: "+name+". "+list+".\n\nSTEP 1: Identify the specific action being performed (for example a jump shot versus a free throw, or a flip turn versus a freestyle stroke) using the video and the athlete’s focus. STEP 2: Compare it to how elite pros perform THAT specific action, using your expert knowledge. General reference checkpoints for the sport (use only those that apply to the identified action):\n- "+(rf||["Use your knowledge of elite-level technique for this sport"]).join("\n- ")+"\n\nAthlete wants analyzed (focus mainly on this): "+($("focus").value||"overall technique")+"\nThe athlete’s extra notes / things to look for: "+($("notes").value||"none")+""+(prior?"\n\nAlready reported from the first half (do not repeat these; look for NEW issues in this half, or note if one continues): "+prior:"")+"\n\nCompare what you actually SEE to these checkpoints. Be specific, encouraging, age-appropriate and honest. Only comment on what is visible; if the video does not show the skill or the body is cut off, say so in summary and set score to 0 with empty fixes. Give 2-4 highest-impact fixes, most important first, plus 1-3 genuine strengths. Reply ONLY with JSON, no markdown:\n{\"action\":\"the specific action you identified\",\"summary\":\"2 sentences\",\"score\":0-100 integer vs pro form,\"strengths\":[\"...\"],\"fixes\":[{\"frame\":1-"+fr.length+",\"x\":0-1,\"y\":0-1 (where in that frame the problem body part is),\"area\":\"body part or phase\",\"issue\":\"what is wrong, vs pro\",\"fix\":\"one clear cue to try next rep\",\"drill\":\"a simple drill, no equipment if possible\",\"severity\":\"high|medium|low\"}]}";
-return prompt}
-function merge(a,b,per){var g=(b.fixes||[]).map(function(x){var y=Object.assign({},x);y.frame=(x.frame||1)+per;return y});
-var o={high:0,medium:1,low:2},all=(a.fixes||[]).concat(g).sort(function(p,q){return (o[p.severity]!=null?o[p.severity]:1)-(o[q.severity]!=null?o[q.severity]:1)}).slice(0,5);
-var sc=Math.round(((a.score||0)+(b.score||0))/((a.score&&b.score)?2:1));
-return {action:(a.action&&b.action&&a.action!==b.action)?a.action+" / "+b.action:(a.action||b.action||""),summary:[a.summary,b.summary].filter(Boolean).join(" "),score:sc,strengths:(a.strengths||[]).concat(b.strengths||[]).slice(0,4),fixes:all}}
+function criteriaFor(s,focus){
+  var exact=SP.find(function(x){return x.n.toLowerCase()===s.toLowerCase()});
+  var checkpoints=refFor(s);
+  var skills=exact?exact.s:[];
+  return [
+    "Sport: "+s,
+    "Possible sport-specific actions: "+(skills.length?skills.join(", "):"Identify the exact action from visible evidence."),
+    "User-requested focus: "+(focus||"overall technique"),
+    "Known sport checkpoints (apply ONLY if relevant to the identified action): "+(checkpoints?checkpoints.join("; "):"Evaluate visible setup, posture, balance, timing, movement sequence, and controlled finish using appropriate sport-specific mechanics."),
+    "For the exact action, evaluate its preparation/setup, execution/contact or power phase, and recovery/follow-through; do not apply criteria for other actions.",
+    "Explain which observable sport-specific checkpoint supports each judgment. Do not invent elite-athlete reference footage, angles, or measurements."
+  ].join("\n");
+}
+function mk(fr,part,prior){
+  var list=fr.map(function(f,i){return "Frame "+(i+1)+" = "+f.t.toFixed(2)+" seconds into the original video"}).join("; ");
+  return "You are a careful youth sports technique analyst. These are "+fr.length+" ORDERED still images from the "+part+" half of ONE clip. "+list+".\n"+
+  criteriaFor(sport,$("focus").value)+"\nAthlete notes: "+($("notes").value||"none")+
+  (prior?"\nPrior observations (avoid duplicate findings): "+prior:"")+
+  "\nFirst identify the actual visible action. Analyze the visible progression across frames, assigning each frame a movement phase such as setup, execution, or follow-through. Only infer motion between frames when supported; do not claim continuous video observation. Compare the exact action against sport-specific established technique principles, not an imaginary professional video. "+
+  "Each finding must cite one of the supplied frame indices AND its exact provided timestamp, copied from the frame list. If you cannot substantiate a finding in a frame, omit it. If camera angle or occlusion prevents a reliable judgment, say so. Avoid fabricated numerical measurements. "+
+  "Include 1-3 real strengths and up to 3 distinct actionable fixes with specific coaching cues, optional drills, and the relevant sport-specific criterion. "+
+  "If the skill or athlete cannot be evaluated, set score 0, fixes [], and explain why. Score is an approximate qualitative estimate, not an instrument measurement. "+
+  "Reply ONLY with valid JSON: "+
+  JSON.stringify({action:"identified action",summary:"two concise sentences",score:75,strengths:["visible strength"],phases:[{frame:1,phase:"setup",observation:"what is visible",confidence:"high"}],fixes:[{frame:1,x:0.5,y:0.5,area:"body part / phase",issue:"specific visible issue",criterion:"sport-specific technique criterion",fix:"one practical cue",drill:"simple safe drill",severity:"medium",confidence:"high"}]})+
+  "\nUse frame indices from 1 to "+fr.length+". Confidence must be high, medium, or low; do not report low-confidence fixes as facts.";
+}
+function merge(a,b,per){
+  function validFixes(result,offset){return (Array.isArray(result.fixes)?result.fixes:[]).filter(function(x){return x&&Number.isInteger(x.frame)&&x.frame>=1&&x.frame<=per}).map(function(x){return Object.assign({},x,{frame:x.frame+offset})})}
+  function validPhases(result,offset){return (Array.isArray(result.phases)?result.phases:[]).filter(function(x){return x&&Number.isInteger(x.frame)&&x.frame>=1&&x.frame<=per}).map(function(x){return Object.assign({},x,{frame:x.frame+offset})})}
+  var priority={high:0,medium:1,low:2};
+  var all=validFixes(a,0).concat(validFixes(b,per)).sort(function(x,y){return (priority[x.severity]??1)-(priority[y.severity]??1)}).slice(0,5);
+  var scores=[a.score,b.score].filter(function(x){return typeof x==="number"&&x>0&&x<=100});
+  return {action:a.action||b.action||"",summary:[a.summary,b.summary].filter(Boolean).join(" "),score:scores.length?Math.round(scores.reduce(function(x,y){return x+y},0)/scores.length):0,
+    strengths:(Array.isArray(a.strengths)?a.strengths:[]).concat(Array.isArray(b.strengths)?b.strengths:[]).slice(0,4),
+    phases:validPhases(a,0).concat(validPhases(b,per)).sort(function(x,y){return x.frame-y.frame}),
+    fixes:all};
+}
 $("go").onclick=async function(){
 analysisRunning=true;upd();$("out").classList.add("hide");$("busy").classList.remove("hide");$("msg").textContent="Grabbing key frames…";$("pb").style.width="5%";
 try{
@@ -435,11 +470,15 @@ btn.disabled=false}
 function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
 function render(r,fr){var o=$("out");o.textContent="";o.classList.remove("hide");
 var c=el("div","card"),s=el("div","score");s.appendChild(el("div","n",String(r.score||0)));var sd=el("div");sd.appendChild(el("b",null,"Form score vs pro"));if(r.action)sd.appendChild(el("div","tag","Action identified: "+r.action));sd.appendChild(el("div",null,r.summary||""));s.appendChild(sd);c.appendChild(s);
-var st=el("div","strip");fr.forEach(function(f){var i=new Image();i.src=f.url;i.alt="frame";st.appendChild(i)});c.appendChild(st);o.appendChild(c);
+var st=el("div","strip");fr.forEach(function(f){var w=el("div","frame-thumb");var i=new Image();i.src=f.url;i.alt="Video frame at "+f.t.toFixed(2)+" seconds";w.appendChild(i);w.appendChild(el("span",null,f.t.toFixed(2)+"s"));st.appendChild(w)});c.appendChild(st);o.appendChild(c);
+if(Array.isArray(r.phases)&&r.phases.length){var phases=el("div","card");phases.appendChild(el("h2",null,"Movement breakdown · key frames"));r.phases.forEach(function(x){var fm=fr[x.frame-1];if(!fm)return;var item=el("div","phase-row");item.appendChild(el("div","tag",fm.t.toFixed(2)+"s · "+(x.phase||"Movement phase")+" · "+(x.confidence||"estimated")+" confidence"));item.appendChild(el("p",null,x.observation||""));phases.appendChild(item)});phases.appendChild(el("p","note","Observations are based on sampled still frames, not continuous motion tracking."));o.appendChild(phases)}
 if((r.strengths||[]).length){var g=el("div","card");g.appendChild(el("h2",null,"What you’re doing well"));var u=el("ul");r.strengths.forEach(function(t){u.appendChild(el("li",null,t))});g.appendChild(u);o.appendChild(g)}
 var f=el("div","card");f.appendChild(el("h2",null,"Fix these first"));
 (r.fixes||[]).forEach(function(x,i){var d=el("div","fix "+(x.severity||"medium"));d.appendChild(el("div","tag",(i+1)+" · "+(x.severity||"medium")+" priority · "+(x.area||"")));d.appendChild(el("h3",null,x.issue||""));
-var fm=fr[Math.max(0,Math.min(fr.length-1,(x.frame||1)-1))];var w=el("div","fr"),im=new Image();im.src=fm.url;im.alt="Frame at "+fm.t.toFixed(1)+" seconds";w.appendChild(im);
+if(x.criterion)d.appendChild(el("p","ref","Technique checkpoint: "+x.criterion));
+if(x.confidence)d.appendChild(el("div","tag","Observation confidence: "+x.confidence));
+var fm=fr[Math.max(0,Math.min(fr.length-1,(x.frame||1)-1))];d.appendChild(el("div","tag","Video timestamp: "+fm.t.toFixed(2)+"s · sampled frame "+x.frame));
+var w=el("div","fr"),im=new Image();im.src=fm.url;im.alt="Frame at "+fm.t.toFixed(1)+" seconds";w.appendChild(im);
 if(typeof x.x==="number"&&typeof x.y==="number"){var p=el("div","pin");p.style.left=Math.max(5,Math.min(95,x.x*100))+"%";p.style.top=Math.max(5,Math.min(95,x.y*100))+"%";w.appendChild(p)}d.appendChild(w);
 var a=el("div","do");a.appendChild(el("b",null,"Try this: "));a.appendChild(document.createTextNode(x.fix||""));d.appendChild(a);
 if(x.drill){var dr=el("div");dr.appendChild(el("b",null,"Drill: "));dr.appendChild(document.createTextNode(x.drill));d.appendChild(dr)}f.appendChild(d)});
