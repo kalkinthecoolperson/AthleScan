@@ -95,7 +95,7 @@ textarea{min-height:90px}
 .steps>.card{margin:0;min-height:152px;border-color:#772c35}
 .steps>.card h2{font-size:13px;color:#f1f2f3;text-transform:none;letter-spacing:-.01em}
 .steps>.card p{font-size:13px;line-height:1.75;color:#abb3bc}
-#v-how>.btn{max-width:260px;margin-top:26px}
+#v-how>.btn{display:block;width:100%;max-width:none;box-sizing:border-box;margin-top:26px;text-align:center}
 /* Fade-in for page sections; results stay visible even if observer misses them. */
 .rv{opacity:0;transform:translateY(var(--dy,24px));transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.2,1)}
 .rv.vis{opacity:1;transform:none}
@@ -137,13 +137,138 @@ body{background:#160e12;background-attachment:fixed}
 /* Quotes: full-bleed across the viewport, without a surrounding box */
 .gal{width:100vw;max-width:none;margin:20px 0 22px calc(50% - 50vw);border:0;border-radius:0;box-shadow:none}
 @media(max-width:680px){.gal{width:100vw;margin:18px 0 20px calc(50% - 50vw);border:0;border-radius:0}}
+
+/* Familiar AthleScan refresh — based on the previously deployed layout. */
+:root{--bg:#160e12;--card:#191216;--ink:#f5eff0;--mute:#b7a9ad}
+body{background:#160e12!important;background-attachment:initial!important}
+.top{border-bottom:1px solid #69303a;background:#160e12}
+#v-analyze>h1{font-size:clamp(34px,5.4vw,58px);font-weight:800;letter-spacing:-.055em;margin-top:38px;margin-bottom:12px}
+#v-analyze>p.sub{font-size:15px;line-height:1.75;max-width:650px;margin-bottom:32px}
+.start{font-size:21px;letter-spacing:-.035em}
+.card{background:#1b1418;border-color:#772c35;border-radius:11px;padding:25px 27px;margin-bottom:18px}
+.card h2{font-size:12px;letter-spacing:.075em}
+.chip{background:#23191e;border-color:#74323d;border-radius:8px}
+.chip:hover{background:#302026}
+.drop{background:#1a1418;border-color:#89404a;padding:36px 22px}
+input[type=search],input[type=text],textarea{background:#130e11;border-color:#6d3841}
+.btn{border-radius:8px}
+.btn:hover:not(:disabled){filter:brightness(1.08)}
+#v-how .about{background:#1b1418}
+#v-how .steps>.card{background:#1b1418}
+#out .card{background:#1b1418}
+@media(max-width:680px){
+ .top{display:flex;flex-wrap:nowrap;align-items:center;gap:7px;padding:10px 14px}
+ .logo{min-width:0;flex:none}
+ .logo svg{width:28px;height:23px}
+ .logo .wm{font-size:10px;letter-spacing:.055em}
+ .tabs{flex:1;min-width:0;justify-content:center;gap:8px;overflow:visible}
+ .tabs button{font-size:12px;padding:10px 5px;min-height:44px;flex:none;touch-action:manipulation;position:relative;z-index:7}
+ .account-button{flex:none;margin-left:0;padding:9px 8px;font-size:11px;position:relative;z-index:7}
+ .card{padding:19px}
+ #v-analyze>h1{margin-top:28px;font-size:37px}
+}
+
+
+/* AthleScan red-and-black refresh: preserve full searchable sports list */
+:root{--bg:#0d090b;--card:#151013;--line:#82313d;--acc:#ed404e;--ink:#f7f1f2;--mute:#b4a3a8}
+html{background:#0d090b}
+body{background:#0d090b!important;color:var(--ink)}
+.top{background:#0d090b!important;border-bottom:1px solid #84303d}
+.card,#out .card,#v-how .steps>.card{background:#171114!important;border:1px solid #8b3541!important}
+.about,#v-how .about{background:#171114!important;border:1px solid #9d3c49!important}
+.chip{background:#201519!important;border:1px solid #803541!important;color:#f7f1f2}
+.chip:hover{background:#301c22}
+.chip[aria-pressed="true"]{background:#6b2330;border-color:#ed404e}
+.drop{background:#140d10!important;border:1.5px dashed #a04450!important}
+input[type=search],input[type=text],textarea{background:#100b0d!important;border:1px solid #79313c!important}
+.account-button,.account-panel{border-color:#893643!important}
+.account-panel{background:#191115!important}
+.btn.ghost{border-color:#893643!important}
+/* Keep the searchable sports list visible and scrollable rather than replacing it with a short set. */
+#sports.chips.list{display:flex!important;flex-wrap:wrap!important;max-height:260px;overflow-y:auto;gap:8px}
+#sports .chip{flex:0 0 auto}
+/* Keep the scrolling quotes full-bleed and unboxed. */
+.gal{width:100vw!important;max-width:none!important;margin:20px 0 22px calc(50% - 50vw)!important;border:0!important;border-radius:0!important;box-shadow:none!important}
+@media(max-width:680px){#sports.chips.list{max-height:245px}.gal{margin-top:16px!important}}
+
+
+/* Make the complete sports selector obvious and permanently visible. */
+#sports.chips.list{display:flex!important;visibility:visible!important;opacity:1!important;max-height:210px!important;min-height:75px;overflow-y:auto!important;align-content:flex-start;padding:12px!important;border:1px solid #8b3541;border-radius:9px;background:#120c0f;scrollbar-width:thin;scrollbar-color:#a74451 #120c0f}
+#sports .chip{display:inline-flex!important;align-items:center;justify-content:center;opacity:1!important;visibility:visible!important}
+#v-analyze>.card:first-of-type{opacity:1!important;transform:none!important}
+@media(max-width:680px){#sports.chips.list{max-height:390px!important;min-height:180px}}
+
+/* Restrained hero-only red fade; the rest of the page stays near-black. */
+html,body{background:#090709!important}
+.top{background:#090709!important}
+#v-analyze{background:linear-gradient(180deg,#270d13 0px,#1a0a0f 170px,#10090c 320px,#090709 510px,#090709 100%);background-repeat:no-repeat;background-size:100% 510px}
+#v-analyze>.gal{background:linear-gradient(180deg,rgba(120,25,38,.22),rgba(50,12,19,.07) 75%,transparent)!important}
+#v-analyze>h1{text-shadow:none}
+.card,#out .card,#v-how .steps>.card{background:#141013!important;border:1px solid #84313d!important;box-shadow:none!important}
+#sports.chips.list{background:#100b0e;border-color:#84313d}
+@media(max-width:680px){#v-analyze{background-size:100% 440px;background-image:linear-gradient(180deg,#270d13 0px,#180a0e 140px,#0e080b 290px,#090709 440px)}}
+/* Quote strip restored above the hero title, full-width and high contrast. */
+#v-analyze>.gal{display:flex!important;visibility:visible!important;opacity:1!important;min-height:172px!important;position:relative;z-index:1;width:100vw!important;max-width:none!important;margin:16px 0 22px calc(50% - 50vw)!important;border:0!important;border-radius:0!important;background:linear-gradient(180deg,rgba(112,25,39,.42),rgba(58,13,23,.23) 65%,transparent)!important;overflow-x:auto!important}
+#v-analyze>.gal .qs{display:flex!important;flex:0 0 100%;min-height:172px;padding:28px 22px;opacity:1!important;visibility:visible!important;transform:none!important}
+#v-analyze>.gal .qs p{color:#f9eef0!important;font-size:clamp(19px,4vw,29px);font-style:italic;font-weight:700}
+#v-analyze>.gal .qs span{color:#f2a0a8!important}
+
+/* Centered, restrained red glow that fades smoothly into black. */
+#v-analyze{background:radial-gradient(ellipse 72% 420px at 50% 230px,rgba(105,17,31,.30) 0%,rgba(60,12,22,.16) 42%,rgba(9,7,9,0) 100%)!important;background-repeat:no-repeat!important;background-size:100% 690px!important}
+@media(max-width:680px){#v-analyze{background:radial-gradient(ellipse 100% 340px at 50% 200px,rgba(105,17,31,.27) 0%,rgba(55,12,22,.13) 48%,transparent 100%)!important;background-repeat:no-repeat!important;background-size:100% 580px!important}}
+
+/* Refined interface motion: quiet, one-time reveals, never pulsing. */
+.rv{opacity:0;transform:translate3d(0,12px,0);transition:opacity .48s cubic-bezier(.22,1,.36,1),transform .48s cubic-bezier(.22,1,.36,1);transition-delay:0s}
+.rv.vis{opacity:1;transform:translate3d(0,0,0)}
+#out > .card.rv{opacity:1;transform:none}
+.card,.chip,.btn,.tabs button,.account-button{transition-property:background-color,border-color,color,box-shadow,opacity,transform;transition-duration:.2s;transition-timing-function:ease-out}
+@media(prefers-reduced-motion:reduce){.rv,.rv.vis{opacity:1!important;transform:none!important;transition:none!important}.card,.chip,.btn,.tabs button,.account-button{transition:none!important}}
+
+/* Visible but restrained center-origin red-to-black ambient gradient. */
+html{background:#090709!important}
+body{background:radial-gradient(ellipse 75% 580px at 50% 350px,rgba(105,20,35,.48) 0%,rgba(63,14,25,.28) 37%,rgba(25,9,15,.12) 67%,rgba(9,7,9,0) 100%),#090709!important;background-attachment:fixed!important}
+#v-analyze{background:transparent!important}
+@media(max-width:680px){body{background:radial-gradient(ellipse 115% 490px at 50% 310px,rgba(105,20,35,.43) 0%,rgba(58,12,24,.24) 43%,rgba(9,7,9,0) 100%),#090709!important;background-attachment:scroll!important}}
+
+/* Center the ambient red glow in the middle of the full page, not near the top. */
+html{background:#090709!important}
+body{background:radial-gradient(ellipse 68% 25% at 50% 50%,rgba(105,20,35,.43) 0%,rgba(66,13,27,.23) 43%,rgba(9,7,9,0) 100%),#090709!important;background-attachment:scroll!important;background-repeat:no-repeat!important}
+#v-analyze{background:transparent!important}
+@media(max-width:680px){body{background:radial-gradient(ellipse 110% 24% at 50% 50%,rgba(105,20,35,.40) 0%,rgba(58,12,24,.21) 46%,transparent 100%),#090709!important;background-attachment:scroll!important}}
+
+/* Solid near-black background with a very dark red undertone; no page gradients. */
+html,body{background:#10090c!important;background-image:none!important;background-attachment:scroll!important}
+#v-analyze,#v-how{background:transparent!important;background-image:none!important}
+#v-analyze>.gal,.gal{background:linear-gradient(180deg,rgba(112,25,39,.42),rgba(58,13,23,.23) 65%,transparent)!important;background-image:linear-gradient(180deg,rgba(112,25,39,.42),rgba(58,13,23,.23) 65%,transparent)!important}
+.top{background:#10090c!important}
+
+/* Subtle dark burgundy interior tint for panels; preserve quote gradient. */
+.card,#out .card,#v-how .steps>.card{background:#1c1116!important}
+.about,#v-how .about{background:#1c1116!important}
+.drop{background:#190f14!important}
+#sports.chips.list{background:#170e12!important}
+.account-panel{background:#1c1116!important}
+
+/* Sports browsing panel only: neutral black interior. */
+#sports.chips.list{background:#09090b!important;scrollbar-color:#a74451 #09090b!important}
+/* Video upload area: same black interior as sports browsing panel. */
+.drop{background:#09090b!important}
+
+/* Highlight the chosen sport clearly without changing the unselected chips. */
+#sports .chip[aria-pressed="true"],#sugg .chip[aria-pressed="true"]{background:#42161f!important;border:2px solid #ff5264!important;color:#fff!important;box-shadow:0 0 0 2px rgba(255,82,100,.15),0 0 13px rgba(255,60,78,.23)!important}
+#sports .chip[aria-pressed="true"]:focus-visible{outline:2px solid #ff8c98;outline-offset:3px}
+
+/* Phone-only: compact sports browser; scrolling and all sport options remain intact. */
+@media (max-width: 600px){
+  #sports.chips.list{max-height:170px!important;min-height:0!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch}
+}
 </style>
 </head>
 <body>
 <main>
 <div class="top"><button class="logo" onclick="scrollTo({top:0,behavior:'smooth'})" aria-label="AthleScan AI, back to top"><svg viewBox="0 0 60 40" width="52" height="35" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff6b75"/><stop offset="1" stop-color="#b3121f"/></linearGradient></defs><g transform="skewX(-14) translate(16 0)"><path d="M0 38 L17.5 2 H26 L43 38 H34.5 L21.8 10.5 L8.5 38 Z" fill="url(#lg)"/><path d="M14.5 27 H28.7 L27.6 31 H13.4 Z" fill="#ff6b75"/><path d="M-6 30 H1.5 M-3 34.5 H0.5" stroke="#ff6b75" stroke-width="1.8" stroke-linecap="round"/></g></svg><span class="wm">ATHLESCAN</span></button><nav class="tabs" aria-label="Sections"><button id="t-analyze" class="on" onclick="tab('analyze')">Analyze</button><button id="t-how" onclick="tab('how')">About</button></nav><button class="account-button" id="account-toggle" type="button" aria-expanded="false">Account</button></div><div id="account-panel" class="account-panel hide" aria-label="Account"><p id="account-status">Loading account…</p><p id="account-quota" class="muted"></p><button class="btn" id="account-signin" type="button">Sign in with Google</button><button class="btn ghost hide" id="account-signout" type="button">Sign out</button></div>
 <div id="v-analyze" class="v">
-<div class="gal" id="gal" aria-label="Quotes about training smarter, swipe to browse"></div>
+<div class="gal" id="gal" aria-label="Quotes about training smarter, swipe to browse"><div class="qs"><p>“Get the fundamentals down and the level of everything you do will rise.”</p><span>— Michael Jordan</span></div></div>
 <h1>AthleScan AI</h1>
 <p class="sub">Upload a short clip of your technique in any sport and get feedback and a comparison to pro mechanics without any cost.</p>
 
@@ -151,7 +276,7 @@ body{background:#160e12;background-attachment:fixed}
 
 <section class="card"><h2>1 · Pick your sport</h2>
 <input type="search" id="q" placeholder="Search sports…" aria-label="Search sports">
-<div class="chips list" id="sports" role="group" aria-label="Sport"></div>
+<p class="ref" style="margin:0 0 10px">Browse all 110+ sports below, or use the search box to filter.</p><div class="chips list" id="sports" role="group" aria-label="Sport"></div>
 <div id="pick" class="hide">
 <h2 style="margin-top:18px">What do you want to analyze?</h2>
 <input type="text" id="focus" placeholder="e.g. my follow-through, or leave blank for an overall check">
@@ -323,14 +448,14 @@ o.appendChild(f);window.LAST={r:r,sport:sport};var pb=el("button","btn","Build m
 var b=el("button","btn ghost","Analyze another clip");b.onclick=function(){window.scrollTo({top:0,behavior:"smooth"})};o.appendChild(b);
 rvAll();o.scrollIntoView({behavior:"smooth"})}
 var Q=[["Get the fundamentals down and the level of everything you do will rise.","Michael Jordan"],["If you don’t have time to do it right, when will you have time to do it over?","John Wooden"],["Don’t mistake activity for achievement.","John Wooden"],["There is surely nothing quite so useless as doing with great efficiency what should not be done at all.","Peter F. Drucker"],["Efficiency is doing things right. Effectiveness is doing the right things.","Peter F. Drucker"],["You play football with your head, and your legs are there to help you.","Johan Cruyff"],["Absorb what is useful, reject what is useless, add what is essentially your own.","Bruce Lee"],["The minute you get away from fundamentals, the bottom can fall out.","Michael Jordan"],["Playing football is very simple, but playing simple football is the hardest thing there is.","Johan Cruyff"],["Talent wins games, but teamwork and intelligence wins championships.","Michael Jordan"]];
-(function(){var g=$("gal");if(!g)return;Q.forEach(function(x){var d=document.createElement("div");d.className="qs";var p=document.createElement("p");p.textContent="“"+x[0]+"”";var a=document.createElement("span");a.textContent="— "+x[1];d.appendChild(p);d.appendChild(a);g.appendChild(d)});
+(function(){var g=$("gal");if(!g)return;g.textContent="";Q.forEach(function(x){var d=document.createElement("div");d.className="qs";var p=document.createElement("p");p.textContent="“"+x[0]+"”";var a=document.createElement("span");a.textContent="— "+x[1];d.appendChild(p);d.appendChild(a);g.appendChild(d)});
 var last=0;["touchstart","pointerdown","wheel"].forEach(function(e){g.addEventListener(e,function(){last=Date.now()},{passive:true})});
 if(matchMedia("(prefers-reduced-motion:reduce)").matches)return;
 setInterval(function(){if(Date.now()-last<5000||document.hidden)return;var w=g.clientWidth;if(!w)return;var i=Math.round(g.scrollLeft/w);g.scrollTo({left:((i+1)%Q.length)*w,behavior:"smooth"})},5000)})();
 function tab(n){["analyze","how"].forEach(function(k){$("v-"+k).classList.toggle("hide",k!==n);var b=$("t-"+k);b.classList.toggle("on",k===n)});scrollTo({top:0});rvAll()}
 var io=null;
 function rvAll(){if(!("IntersectionObserver" in window)||matchMedia("(prefers-reduced-motion:reduce)").matches)return;
-io=io||new IntersectionObserver(function(es){es.forEach(function(e){var t=e.target;if(e.isIntersecting){t.classList.add("vis")}else{t.style.setProperty("--dy",e.boundingClientRect.top<0?"-32px":"32px");t.classList.remove("vis")}})},{threshold:0.08});
+io=io||new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add("vis");io.unobserve(e.target)}})},{threshold:0.06,rootMargin:"0px 0px 28px 0px"});
 [].forEach.call(document.querySelectorAll(".v > h1,.v > p,.steps > p,.steps > section,.v > section:not(#out):not(.about),main > p.note,.about .in,#out > .card"),function(t){if(t.rv)return;t.rv=1;t.classList.add("rv");io.observe(t)})}
 rvAll();
 </script>
