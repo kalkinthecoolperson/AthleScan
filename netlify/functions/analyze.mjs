@@ -18,6 +18,7 @@ export default async (request) => {
   const firebaseProject = "athlescan-auth";
   if (!supabaseUrl || !serviceKey) return json({ error: "Supabase is not configured in Netlify." }, 500);
   if (!["status", "reserve", "analyze", "plan"].includes(task)) return json({ error: "Unknown task." }, 400);
+
   // Google users use their verified Firebase UID. Guests receive a signed,
   // HttpOnly, same-site cookie; the cookie never contains a Supabase credential.
   const bearer = request.headers.get("authorization") || "";
@@ -187,7 +188,7 @@ export default async (request) => {
             thinkingConfig: {
               thinkingLevel: "LOW"
             },
-            maxOutputTokens: task === "plan" ? 1800 : 2000,
+            maxOutputTokens: task === "plan" ? 1800 : 3200,
             responseMimeType: "application/json"
           }
         })
@@ -300,7 +301,7 @@ async function signGuestCookie(id, secret) {
 }
 
 async function verifyGuestCookie(value, secret) {
-  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
+  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
   if (!m) return null;
 
   const expected = await guestHmac(m[1], secret);
