@@ -286,6 +286,17 @@ html,body{background:#10090c!important;background-image:none!important;backgroun
   flex: 0 0 100%;
   scroll-snap-align: start;
 }
+
+/* Post-analysis feedback only */
+.feedback-card{margin-top:18px;text-align:center}
+.feedback-card h2{font-size:18px;text-transform:none;letter-spacing:0;margin:0 0 14px;color:var(--ink)}
+.feedback-stars{display:flex;justify-content:center;gap:8px;align-items:center}
+.feedback-star{background:none;border:0;color:#76636a;font-size:36px;line-height:1.2;cursor:pointer;padding:4px;transition:color .15s ease}
+.feedback-star.selected{color:#ffc15e}
+.feedback-star:focus-visible{outline:2px solid #ff8c98;border-radius:6px}
+.feedback-card .btn{max-width:300px;margin:16px auto 0;display:block}
+.feedback-status{font-size:14px;color:#ffb7bd;margin:10px 0 0}
+.feedback-thanks{font-size:18px;font-weight:700;color:var(--ink);margin:0}
 </style>
 </head>
 <body>
@@ -474,7 +485,7 @@ $("msg").textContent="Analyzing the second half…";$("pb").style.width="80%";
 var prior=(r1.fixes||[]).map(function(x){return (x.area||"")+": "+(x.issue||"")}).join(" | ");
 var r2=await sendAnalysis(B,"second",prior);
 var r=merge(r1,r2,per);
-render(r,fr)}catch(e){$("msg").textContent=(e&&e.message)||"Something went wrong. Try a shorter clip.";$("pb").style.width="0";analysisRunning=false;upd();return}
+window.feedbackReservationId=reservationId;render(r,fr)}catch(e){$("msg").textContent=(e&&e.message)||"Something went wrong. Try a shorter clip.";$("pb").style.width="0";analysisRunning=false;upd();return}
 $("busy").classList.add("hide");analysisRunning=false;upd()};
 
 async function mkPlan(btn){var L=window.LAST,pc=$("plan");btn.disabled=true;btn.textContent="Building your plan…";pc.textContent="";
@@ -503,6 +514,22 @@ var a=el("div","do");a.appendChild(el("b",null,"Try this: "));a.appendChild(docu
 if(x.drill){var dr=el("div");dr.appendChild(el("b",null,"Drill: "));dr.appendChild(document.createTextNode(x.drill));d.appendChild(dr)}f.appendChild(d)});
 if(!(r.fixes||[]).length)f.appendChild(el("p",null,"No fixes to show – try a clip with your whole body visible."));
 o.appendChild(f);window.LAST={r:r,sport:sport};var pb=el("button","btn","Build my practice plan");pb.onclick=function(){mkPlan(pb)};o.appendChild(pb);var pc=el("div");pc.id="plan";o.appendChild(pc);
+// Show feedback only after a successful completed analysis.
+var feedback=el("section","card feedback-card");
+feedback.appendChild(el("h2",null,"Was this analysis helpful?"));
+var stars=el("div","feedback-stars");stars.setAttribute("role","group");stars.setAttribute("aria-label","Rating from 0 to 5 stars");
+var rating=0, starButtons=[];
+function paintStars(){starButtons.forEach(function(btn,i){btn.classList.toggle("selected",i<rating);btn.setAttribute("aria-pressed",String(i<rating))})}
+for(var n=1;n<=5;n++){(function(value){var star=el("button","feedback-star","★");star.type="button";star.setAttribute("aria-label",value+" star"+(value===1?"":"s"));star.onclick=function(){rating=rating===value?0:value;paintStars()};starButtons.push(star);stars.appendChild(star)})(n)}
+feedback.appendChild(stars);
+var ratingText=el("p","ref","0 / 5 stars (click a selected star again for 0)");feedback.appendChild(ratingText);
+var originalPaint=paintStars;paintStars=function(){originalPaint();ratingText.textContent=rating+" / 5 stars (click a selected star again for 0)"};
+var submit=el("button","btn","Submit feedback");submit.type="button";
+var feedbackStatus=el("p","feedback-status");feedbackStatus.setAttribute("role","status");
+submit.onclick=async function(){submit.disabled=true;submit.textContent="Submitting…";feedbackStatus.textContent="";
+try{await apiTask({task:"feedback",rating:rating,reservationId:window.feedbackReservationId,sport:sport});feedback.textContent="";feedback.appendChild(el("p","feedback-thanks","Thank you for your feedback!"))}
+catch(err){feedbackStatus.textContent=(err&&err.message)||"Could not save feedback. Please try again.";submit.disabled=false;submit.textContent="Submit feedback"}};
+feedback.appendChild(submit);feedback.appendChild(feedbackStatus);o.appendChild(feedback);
 var b=el("button","btn ghost","Analyze another clip");b.onclick=function(){window.scrollTo({top:0,behavior:"smooth"})};o.appendChild(b);
 rvAll();o.scrollIntoView({behavior:"smooth"})}
 var Q=[["Get the fundamentals down and the level of everything you do will rise.","Michael Jordan"],["If you don’t have time to do it right, when will you have time to do it over?","John Wooden"],["Don’t mistake activity for achievement.","John Wooden"],["There is surely nothing quite so useless as doing with great efficiency what should not be done at all.","Peter F. Drucker"],["Efficiency is doing things right. Effectiveness is doing the right things.","Peter F. Drucker"],["You play football with your head, and your legs are there to help you.","Johan Cruyff"],["Absorb what is useful, reject what is useless, add what is essentially your own.","Bruce Lee"],["The minute you get away from fundamentals, the bottom can fall out.","Michael Jordan"],["Playing football is very simple, but playing simple football is the hardest thing there is.","Johan Cruyff"],["Talent wins games, but teamwork and intelligence wins championships.","Michael Jordan"]];
