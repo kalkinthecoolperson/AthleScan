@@ -12,12 +12,12 @@ export default async (request) => {
     return json({ error: "The request was not valid JSON." }, 400);
   }
 
-  const { task, prompt, images, reservationId } = body || {};
+  const { task, prompt, images, reservationId, rating, sport } = body || {};
   const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const firebaseProject = "athlescan-auth";
   if (!supabaseUrl || !serviceKey) return json({ error: "Supabase is not configured in Netlify." }, 500);
-  if (!["status", "reserve", "analyze", "plan"].includes(task)) return json({ error: "Unknown task." }, 400);
+  if (!["status", "reserve", "analyze", "plan", "feedback"].includes(task)) return json({ error: "Unknown task." }, 400);
 
   // Google users use their verified Firebase UID. Guests receive a signed,
   // HttpOnly, same-site cookie; the cookie never contains a Supabase credential.
@@ -77,6 +77,30 @@ export default async (request) => {
     }
   }
 
+  if (task === "feedback") {
+    if (!Number.isInteger(rating) || rating < 0 || rating > 5 ||
+        typeof reservationId !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)) {
+      return respond({ error: "Invalid feedback rating or analysis reference." }, 400);
+    }
+    // Only allow feedback on a reservation belonging to the authenticated user.
+    try {
+      const r = await fetch(supabaseUrl + "/rest/v1/rpc/athlescan_submit_feedback", {
+        method: "POST", headers: serviceHeaders,
+        body: JSON.stringify({ p_user_id: userId, p_reservation_id: reservationId, p_rating: rating, p_sport: typeof sport === "string" ? sport.slice(0, 100) : "" })
+      });
+      if (!r.ok) {
+        if (r.status === 409) return respond({ error: "Feedback has already been submitted for this analysis." }, 409);
+        throw Error("Feedback RPC failed: " + r.status + " " + (await r.text()).slice(0, 300));
+      }
+      if (await r.json() !== true) return respond({ error: "Feedback could not be accepted for this analysis." }, 403);
+      return respond({ saved: true });
+    } catch (e) {
+      console.error(e);
+      return respond({ error: "Could not save feedback. Please try again." }, 502);
+    }
+  }
+
   if (typeof prompt !== "string" || !prompt.trim()) {
     return respond({
       error: "The request is missing its prompt."
@@ -86,7 +110,7 @@ export default async (request) => {
   if (task === "analyze") {
     if (
       typeof reservationId !== "string" ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
     ) {
       return respond({
         error: "Start a new analysis to obtain a valid reservation."
@@ -302,7 +326,7 @@ async function signGuestCookie(id, secret) {
 
 async function verifyGuestCookie(value, secret) {
 
-const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
+const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
 
 if (!m) return null;
 
