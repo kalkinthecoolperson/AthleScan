@@ -138,7 +138,7 @@ export default async (request) => {
       rating < 0 ||
       rating > 5 ||
       typeof reservationId !== "string" ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
     ) {
       return respond({
         error: "Invalid feedback rating or analysis reference."
