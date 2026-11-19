@@ -108,6 +108,12 @@ export default async (request) => {
   }
 
   if (task === "analyze") {
+    console.log("Reservation validation:", {
+  type: typeof reservationId,
+  length: reservationId?.length,
+  valid: typeof reservationId === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
+});
     if (
       typeof reservationId !== "string" ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
