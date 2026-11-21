@@ -138,7 +138,7 @@ export default async (request) => {
       rating < 0 ||
       rating > 5 ||
       typeof reservationId !== "string" ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
     ) {
       return respond({
         error: "Invalid feedback rating or analysis reference."
@@ -191,7 +191,38 @@ export default async (request) => {
     }
   }
 
+  // A reservation holds a slot while Gemini runs. Only a validated
+  // successful response is finalized as completed in Supabase.
+  async function updateReservation(rpc) {
+    const response = await fetch(supabaseUrl + "/rest/v1/rpc/" + rpc, {
+      method: "POST",
+      headers: serviceHeaders,
+      body: JSON.stringify({
+        p_reservation_id: reservationId,
+        p_user_id: userId
+      })
+    });
+    if (!response.ok) {
+      throw Error(rpc + " failed: " + response.status + " " +
+        (await response.text()).slice(0, 300));
+    }
+    return (await response.json()) === true;
+  }
+
+  async function releaseFailedAnalysis() {
+    if (task !== "analyze") return;
+    try {
+      await updateReservation("athlescan_v2_fail");
+    } catch (error) {
+      // The pending slot will expire after 20 minutes if Supabase is down.
+      console.error("Could not release failed analysis reservation:", error);
+    }
+  }
+
   if (typeof prompt !== "string" || !prompt.trim()) {
+    if (task === "analyze" && typeof reservationId === "string") {
+      await releaseFailedAnalysis();
+    }
     return respond({
       error: "The request is missing its prompt."
     }, 400);
@@ -211,6 +242,7 @@ export default async (request) => {
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
+    await releaseFailedAnalysis();
     return respond({
       error: "The AI service is not configured yet. Ask the site administrator to add GEMINI_API_KEY in Netlify."
     }, 500);
@@ -224,6 +256,7 @@ export default async (request) => {
       images.length < 1 ||
       images.length > 3
     ) {
+      await releaseFailedAnalysis();
       return respond({
         error: "Each analysis request must contain 1–3 frames."
       }, 400);
@@ -235,6 +268,7 @@ export default async (request) => {
         !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(image) ||
         image.length > 2_000_000
       ) {
+        await releaseFailedAnalysis();
         return respond({
           error: "A video frame was invalid or too large. Try a shorter or smaller clip."
         }, 400);
@@ -248,42 +282,6 @@ export default async (request) => {
           data
         }
       });
-    }
-  }
-
-  if (task === "analyze") {
-    // Atomically consume one of two frame batches.
-    try {
-      const r = await fetch(
-        supabaseUrl + "/rest/v1/rpc/athlescan_v2_consume",
-        {
-          method: "POST",
-          headers: serviceHeaders,
-          body: JSON.stringify({
-            p_reservation_id: reservationId,
-            p_user_id: userId
-          })
-        }
-      );
-
-      if (!r.ok) {
-        throw Error(
-          "Consumption failed: " +
-          r.status + " " +
-          (await r.text()).slice(0, 300)
-        );
-      }
-
-      if (await r.json() !== true) {
-        return respond({
-          error: "This analysis reservation is expired or already used. Start a new analysis."
-        }, 403);
-      }
-    } catch (e) {
-      console.error(e);
-      return respond({
-        error: "Could not validate your analysis reservation."
-      }, 502);
     }
   }
 
@@ -312,6 +310,7 @@ export default async (request) => {
     const result = await upstream.json();
 
     if (!upstream.ok) {
+      await releaseFailedAnalysis();
       console.error("Gemini API error:", result);
 
       if (upstream.status === 503) {
@@ -331,6 +330,7 @@ export default async (request) => {
       .trim();
 
     if (!text) {
+      await releaseFailedAnalysis();
       console.error(
         "Gemini returned no text:",
         result?.promptFeedback ||
@@ -347,6 +347,7 @@ export default async (request) => {
     try {
       parsed = JSON.parse(text);
     } catch {
+      await releaseFailedAnalysis();
       console.error(
         "Gemini response was not valid JSON:",
         text.slice(0, 500)
@@ -357,10 +358,37 @@ export default async (request) => {
       }, 502);
     }
 
+    if (parsed === null || typeof parsed !== "object" ||
+        Array.isArray(parsed) || Object.keys(parsed).length === 0) {
+      await releaseFailedAnalysis();
+      return respond({
+        error: "Gemini returned an incomplete analysis. Please try again."
+      }, 502);
+    }
+
+    if (task === "analyze") {
+      let completed;
+      try {
+        completed = await updateReservation("athlescan_v2_consume");
+      } catch (error) {
+        console.error("Could not finalize successful analysis:", error);
+        // Do not claim success if the usage transaction is unconfirmed.
+        return respond({
+          error: "Could not finalize your analysis. Please try again."
+        }, 502);
+      }
+      if (!completed) {
+        return respond({
+          error: "This analysis reservation is expired or already used. Start a new analysis."
+        }, 403);
+      }
+    }
+
     return respond({ result: parsed }, 200);
 
   } catch (error) {
     console.error("Gemini request failed:", error);
+    await releaseFailedAnalysis();
 
     return respond({
       error: "Could not connect to Gemini. Please try again."
@@ -499,7 +527,7 @@ async function signGuestCookie(id, secret) {
 }
 
 async function verifyGuestCookie(value, secret) {
-  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
+  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
 
   if (!m) return null;
 
