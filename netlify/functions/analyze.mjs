@@ -25,8 +25,6 @@ export default async (request) => {
     return json({ error: "Unknown task." }, 400);
   }
 
-  // Google users use their verified Firebase UID. Guests receive a signed,
-  // HttpOnly, same-site cookie; the cookie never contains a Supabase credential.
   const bearer = request.headers.get("authorization") || "";
   let userId, guestCookie = null;
 
@@ -44,7 +42,6 @@ export default async (request) => {
       }, 401);
     }
   } else {
-    // A cross-site POST must not mint or spend someone else's guest identity.
     const origin = request.headers.get("origin");
     if (origin && new URL(origin).origin !== new URL(request.url).origin) {
       return json({ error: "Invalid request origin." }, 403);
@@ -52,23 +49,11 @@ export default async (request) => {
 
     const secret = serviceKey;
     const cookies = request.headers.get("cookie") || "";
-    console.log("Cookie header names:", {
-  cookie: request.headers.has("cookie"),
-  xForwardedCookie: request.headers.has("x-forwarded-cookie"),
-  hasSetCookie: request.headers.has("set-cookie")
-});
-    console.log("Cookie header diagnostic:", {
-  hasCookieHeader: request.headers.has("cookie"),
-  cookieLength: cookies.length
-});
+
     const match = cookies.match(/(?:^|;\s*)athlescan_guest=([^;]+)/);
     const existing = match
       ? await verifyGuestCookie(decodeURIComponent(match[1]), secret)
       : null;
-    console.log("Guest cookie diagnostic:", {
-  cookieReceived: Boolean(match),
-  cookieVerified: Boolean(existing)
-});
 
     const guestId = existing || crypto.randomUUID();
     userId = "guest:" + guestId;
@@ -88,6 +73,10 @@ export default async (request) => {
     Authorization: "Bearer " + serviceKey,
     "Content-Type": "application/json"
   };
+
+  const validReservationId = (value) =>
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
   if (task === "status" || task === "reserve") {
     try {
@@ -148,10 +137,9 @@ export default async (request) => {
   if (task === "feedback") {
     if (
       !Number.isInteger(rating) ||
-      rating < 0 ||
+      rating < 1 ||
       rating > 5 ||
-      typeof reservationId !== "string" ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
+      !validReservationId(reservationId)
     ) {
       return respond({
         error: "Invalid feedback rating or analysis reference."
@@ -204,8 +192,6 @@ export default async (request) => {
     }
   }
 
-  // A reservation holds a slot while Gemini runs. Only a validated
-  // successful response is finalized as completed in Supabase.
   async function updateReservation(rpc) {
     const response = await fetch(supabaseUrl + "/rest/v1/rpc/" + rpc, {
       method: "POST",
@@ -215,57 +201,60 @@ export default async (request) => {
         p_user_id: userId
       })
     });
+
     if (!response.ok) {
-      throw Error(rpc + " failed: " + response.status + " " +
-        (await response.text()).slice(0, 300));
+      throw Error(
+        rpc + " failed: " + response.status + " " +
+        (await response.text()).slice(0, 300)
+      );
     }
+
     return (await response.json()) === true;
   }
 
   async function releaseFailedAnalysis() {
     if (task !== "analyze") return;
+
     try {
       await updateReservation("athlescan_v2_fail");
     } catch (error) {
-      // The pending slot will expire after 20 minutes if Supabase is down.
-      console.error("Could not release failed analysis reservation:", error);
+      console.error(
+        "Could not release failed analysis reservation:",
+        error
+      );
     }
   }
-  if (task === "cancel") {
-  if (
-    typeof reservationId !== "string" ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
-  ) {
-    return respond({ error: "Invalid reservation." }, 400);
-  }
 
-  try {
-    const released = await updateReservation("athlescan_v2_fail");
-    return respond({ released });
-  } catch (error) {
-    console.error("Could not cancel reservation:", error);
-    return respond({ error: "Could not cancel reservation." }, 502);
+  if (task === "cancel") {
+    if (!validReservationId(reservationId)) {
+      return respond({ error: "Invalid reservation." }, 400);
+    }
+
+    try {
+      const released = await updateReservation("athlescan_v2_fail");
+      return respond({ released });
+    } catch (error) {
+      console.error("Could not cancel reservation:", error);
+      return respond({
+        error: "Could not cancel reservation."
+      }, 502);
+    }
   }
-}
 
   if (typeof prompt !== "string" || !prompt.trim()) {
     if (task === "analyze" && typeof reservationId === "string") {
       await releaseFailedAnalysis();
     }
+
     return respond({
       error: "The request is missing its prompt."
     }, 400);
   }
 
-  if (task === "analyze") {
-    if (
-      typeof reservationId !== "string" ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
-    ) {
-      return respond({
-        error: "Start a new analysis to obtain a valid reservation."
-      }, 403);
-    }
+  if (task === "analyze" && !validReservationId(reservationId)) {
+    return respond({
+      error: "Start a new analysis to obtain a valid reservation."
+    }, 403);
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
@@ -387,8 +376,12 @@ export default async (request) => {
       }, 502);
     }
 
-    if (parsed === null || typeof parsed !== "object" ||
-        Array.isArray(parsed) || Object.keys(parsed).length === 0) {
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed) ||
+      Object.keys(parsed).length === 0
+    ) {
       await releaseFailedAnalysis();
       return respond({
         error: "Gemini returned an incomplete analysis. Please try again."
@@ -397,15 +390,16 @@ export default async (request) => {
 
     if (task === "analyze") {
       let completed;
+
       try {
         completed = await updateReservation("athlescan_v2_consume");
       } catch (error) {
         console.error("Could not finalize successful analysis:", error);
-        // Do not claim success if the usage transaction is unconfirmed.
         return respond({
           error: "Could not finalize your analysis. Please try again."
         }, 502);
       }
+
       if (!completed) {
         return respond({
           error: "This analysis reservation is expired or already used. Start a new analysis."
@@ -441,7 +435,6 @@ function json(data, statusCode = 200, cookie = null) {
   });
 }
 
-// Verify Firebase ID tokens locally using Google's published signing keys.
 async function verifyFirebaseToken(token, projectId) {
   const pieces = token.split(".");
 
@@ -527,7 +520,6 @@ async function verifyFirebaseToken(token, projectId) {
   };
 }
 
-// The signature prevents clients from choosing arbitrary guest IDs.
 async function guestHmac(value, secret) {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -557,18 +549,11 @@ async function signGuestCookie(id, secret) {
 
 async function verifyGuestCookie(value, secret) {
   const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
-console.log("Guest cookie format:", {
-  formatValid: Boolean(m),
-  valueLength: value.length
-});
+
   if (!m) return null;
-console.log("Guest signature diagnostic:", {
-  formatValid: Boolean(m),
-  signatureLength: m ? m[2].length : null
-});
+
   const expected = await guestHmac(m[1], secret);
 
-  // Constant-time compare of two fixed-length hexadecimal signatures.
   let difference = 0;
 
   for (let i = 0; i < 64; i++) {
