@@ -231,6 +231,22 @@ export default async (request) => {
       console.error("Could not release failed analysis reservation:", error);
     }
   }
+  if (task === "cancel") {
+  if (
+    typeof reservationId !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reservationId)
+  ) {
+    return respond({ error: "Invalid reservation." }, 400);
+  }
+
+  try {
+    const released = await updateReservation("athlescan_v2_fail");
+    return respond({ released });
+  } catch (error) {
+    console.error("Could not cancel reservation:", error);
+    return respond({ error: "Could not cancel reservation." }, 502);
+  }
+}
 
   if (typeof prompt !== "string" || !prompt.trim()) {
     if (task === "analyze" && typeof reservationId === "string") {
