@@ -492,7 +492,14 @@ var r=merge(r1,r2,per);
   $("msg").textContent=(e&&e.message)||"Something went wrong. Try a shorter clip.";
   $("pb").style.width="0";
   analysisRunning=false;
-  await refreshQuota();
+  if(reservationId){
+  try{
+    await apiTask({task:"cancel",reservationId:reservationId});
+  }catch(cancelError){
+    console.warn("Could not cancel unfinished reservation:",cancelError);
+  }
+}
+await refreshQuota();
   upd();
   return;
 }
