@@ -540,7 +540,7 @@ async function signGuestCookie(id, secret) {
 }
 
 async function verifyGuestCookie(value, secret) {
-  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
+  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
 console.log("Guest cookie format:", {
   formatValid: Boolean(m),
   valueLength: value.length
