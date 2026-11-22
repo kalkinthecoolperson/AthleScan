@@ -543,7 +543,10 @@ async function verifyGuestCookie(value, secret) {
   const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
 
   if (!m) return null;
-
+console.log("Guest signature diagnostic:", {
+  formatValid: Boolean(m),
+  signatureLength: m ? m[2].length : null
+});
   const expected = await guestHmac(m[1], secret);
 
   // Constant-time compare of two fixed-length hexadecimal signatures.
