@@ -52,6 +52,10 @@ export default async (request) => {
 
     const secret = serviceKey;
     const cookies = request.headers.get("cookie") || "";
+    console.log("Cookie header diagnostic:", {
+  hasCookieHeader: request.headers.has("cookie"),
+  cookieLength: cookies.length
+});
     const match = cookies.match(/(?:^|;\s*)athlescan_guest=([^;]+)/);
     const existing = match
       ? await verifyGuestCookie(decodeURIComponent(match[1]), secret)
