@@ -488,6 +488,8 @@ $("msg").textContent="Analyzing the second half…";$("pb").style.width="80%";
 var prior=(r1.fixes||[]).map(function(x){return (x.area||"")+": "+(x.issue||"")}).join(" | ");
 var r2=await sendAnalysis(B,"second",prior);
 var r=merge(r1,r2,per);
+window.feedbackReservationId=reservationId;
+render(r,fr);
 }catch(e){
   $("msg").textContent=(e&&e.message)||"Something went wrong. Try a shorter clip.";
   $("pb").style.width="0";
