@@ -56,6 +56,10 @@ export default async (request) => {
     const existing = match
       ? await verifyGuestCookie(decodeURIComponent(match[1]), secret)
       : null;
+    console.log("Guest cookie diagnostic:", {
+  cookieReceived: Boolean(match),
+  cookieVerified: Boolean(existing)
+});
 
     const guestId = existing || crypto.randomUUID();
     userId = "guest:" + guestId;
