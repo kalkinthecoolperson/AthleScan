@@ -52,6 +52,11 @@ export default async (request) => {
 
     const secret = serviceKey;
     const cookies = request.headers.get("cookie") || "";
+    console.log("Cookie header names:", {
+  cookie: request.headers.has("cookie"),
+  xForwardedCookie: request.headers.has("x-forwarded-cookie"),
+  hasSetCookie: request.headers.has("set-cookie")
+});
     console.log("Cookie header diagnostic:", {
   hasCookieHeader: request.headers.has("cookie"),
   cookieLength: cookies.length
