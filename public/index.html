@@ -468,9 +468,10 @@ function merge(a,b,per){
 }
 $("go").onclick=async function(){
 analysisRunning=true;upd();$("out").classList.add("hide");$("busy").classList.remove("hide");$("msg").textContent="Grabbing key frames…";$("pb").style.width="5%";
+var reservationId=null;
 try{
 var per=3;var fr=await frames(per*2);
-$("msg").textContent="Checking your analysis limit…";var reserved=await apiTask({task:"reserve"});var reservationId=reserved.reservationId;quotaRemaining=reserved.remaining;upd();
+$("msg").textContent="Checking your analysis limit…";var reserved=await apiTask({task:"reserve"});reservationId=reserved.reservationId;quotaRemaining=reserved.remaining;upd();
 var A=fr.slice(0,per),B=fr.slice(per);
 async function sendAnalysis(partFrames,part,prior){
   var images=await Promise.all(partFrames.map(function(f){return new Promise(function(resolve,reject){
