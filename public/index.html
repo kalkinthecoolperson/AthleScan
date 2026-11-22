@@ -487,8 +487,19 @@ $("msg").textContent="Analyzing the second half…";$("pb").style.width="80%";
 var prior=(r1.fixes||[]).map(function(x){return (x.area||"")+": "+(x.issue||"")}).join(" | ");
 var r2=await sendAnalysis(B,"second",prior);
 var r=merge(r1,r2,per);
-window.feedbackReservationId=reservationId;render(r,fr)}catch(e){$("msg").textContent=(e&&e.message)||"Something went wrong. Try a shorter clip.";$("pb").style.width="0";analysisRunning=false;upd();return}
-$("busy").classList.add("hide");analysisRunning=false;upd()};
+}catch(e){
+  $("msg").textContent=(e&&e.message)||"Something went wrong. Try a shorter clip.";
+  $("pb").style.width="0";
+  analysisRunning=false;
+  await refreshQuota();
+  upd();
+  return;
+}
+$("busy").classList.add("hide");
+analysisRunning=false;
+await refreshQuota();
+upd();
+};
 
 async function mkPlan(btn){var L=window.LAST,pc=$("plan");btn.disabled=true;btn.textContent="Building your plan…";pc.textContent="";
 try{var fx=(L.r.fixes||[]).map(function(x,i){return (i+1)+". "+x.area+": "+x.issue+" (cue: "+x.fix+")"}).join("\n");
