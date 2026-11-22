@@ -21,7 +21,7 @@ export default async (request) => {
     return json({ error: "Supabase is not configured in Netlify." }, 500);
   }
 
-  if (!["status", "reserve", "analyze", "plan", "feedback"].includes(task)) {
+  if (!["status", "reserve", "analyze", "plan", "feedback", "cancel"].includes(task)) {
     return json({ error: "Unknown task." }, 400);
   }
 
