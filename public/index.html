@@ -299,11 +299,33 @@ html,body{background:#10090c!important;background-image:none!important;backgroun
 .feedback-card .btn{max-width:300px;margin:16px auto 0;display:block}
 .feedback-status{font-size:14px;color:#ffb7bd;margin:10px 0 0}
 .feedback-thanks{font-size:18px;font-weight:700;color:var(--ink);margin:0}
+
+/* Dashboard: uses AthleScan's existing dark burgundy theme. */
+.dashboard-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:34px 0 24px}
+.dashboard-head h1{font-size:clamp(30px,4vw,44px);letter-spacing:-.04em;margin:0 0 6px}
+.dashboard-head .sub{margin:0;color:var(--mute)}
+.dashboard-new{width:auto;white-space:nowrap;margin:0}
+.dashboard-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0}
+.dashboard-stats .card{margin:0;padding:20px}
+.dashboard-number{font-size:clamp(25px,3vw,38px);font-weight:800;line-height:1.2;overflow-wrap:anywhere}
+.dashboard-sport{font-size:clamp(17px,2vw,25px)}
+.dashboard-section{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.dashboard-chart{min-height:180px;display:flex;align-items:center;justify-content:center}
+.dashboard-chart svg{display:block;width:100%;height:auto;max-height:280px}
+.dashboard-entry{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:15px 0;border-top:1px solid var(--line)}
+.dashboard-entry:first-child{border-top:0}
+.dashboard-entry strong{display:block}
+.dashboard-entry .ref{margin:3px 0}
+.dashboard-entry .dashboard-score{font-size:23px;font-weight:800;color:#ff7886;white-space:nowrap}
+.dashboard-entry details{margin-top:8px;font-size:13px;color:var(--mute)}
+.dashboard-entry summary{cursor:pointer;color:#f7d4d9}
+@media(max-width:760px){.dashboard-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-head{align-items:flex-start}.dashboard-new{font-size:12px;padding:9px}.top{gap:12px}}
+@media(max-width:420px){.tabs{gap:6px}.tabs button{font-size:11px;padding:8px 2px}.logo .wm{font-size:9px}.account-button{font-size:10px;padding:8px 6px}}
 </style>
 </head>
 <body>
 <main>
-<div class="top"><button class="logo" onclick="scrollTo({top:0,behavior:'smooth'})" aria-label="AthleScan AI, back to top"><svg viewBox="0 0 60 40" width="52" height="35" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff6b75"/><stop offset="1" stop-color="#b3121f"/></linearGradient></defs><g transform="skewX(-14) translate(16 0)"><path d="M0 38 L17.5 2 H26 L43 38 H34.5 L21.8 10.5 L8.5 38 Z" fill="url(#lg)"/><path d="M14.5 27 H28.7 L27.6 31 H13.4 Z" fill="#ff6b75"/><path d="M-6 30 H1.5 M-3 34.5 H0.5" stroke="#ff6b75" stroke-width="1.8" stroke-linecap="round"/></g></svg><span class="wm">ATHLESCAN</span></button><nav class="tabs" aria-label="Sections"><button id="t-analyze" class="on" onclick="tab('analyze')">Analyze</button><button id="t-how" onclick="tab('how')">About</button></nav><button class="account-button" id="account-toggle" type="button" aria-expanded="false">Account</button></div><div id="account-panel" class="account-panel hide" aria-label="Account"><p id="account-status">Loading account…</p><p id="account-quota" class="muted"></p><button class="btn" id="account-signin" type="button">Sign in with Google</button><button class="btn ghost hide" id="account-signout" type="button">Sign out</button></div>
+<div class="top"><button class="logo" onclick="scrollTo({top:0,behavior:'smooth'})" aria-label="AthleScan AI, back to top"><svg viewBox="0 0 60 40" width="52" height="35" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff6b75"/><stop offset="1" stop-color="#b3121f"/></linearGradient></defs><g transform="skewX(-14) translate(16 0)"><path d="M0 38 L17.5 2 H26 L43 38 H34.5 L21.8 10.5 L8.5 38 Z" fill="url(#lg)"/><path d="M14.5 27 H28.7 L27.6 31 H13.4 Z" fill="#ff6b75"/><path d="M-6 30 H1.5 M-3 34.5 H0.5" stroke="#ff6b75" stroke-width="1.8" stroke-linecap="round"/></g></svg><span class="wm">ATHLESCAN</span></button><nav class="tabs" aria-label="Sections"><button id="t-analyze" class="on" onclick="tab('analyze')">Analyze</button><button id="t-dashboard" onclick="tab('dashboard')">Dashboard</button><button id="t-how" onclick="tab('how')">About</button></nav><button class="account-button" id="account-toggle" type="button" aria-expanded="false">Account</button></div><div id="account-panel" class="account-panel hide" aria-label="Account"><p id="account-status">Loading account…</p><p id="account-quota" class="muted"></p><button class="btn" id="account-signin" type="button">Sign in with Google</button><button class="btn ghost hide" id="account-signout" type="button">Sign out</button></div>
 <div id="v-analyze" class="v">
 <div class="gal" id="gal" aria-label="Quotes about training smarter, swipe to browse"><div class="qs"><p>“Get the fundamentals down and the level of everything you do will rise.”</p><span>— Michael Jordan</span></div></div>
 <h1>AthleScan AI</h1>
@@ -338,6 +360,21 @@ html,body{background:#10090c!important;background-image:none!important;backgroun
 <section id="out" class="hide"></section>
 </div>
 
+
+<div id="v-dashboard" class="v hide">
+  <div class="dashboard-head"><div><h1>Your Dashboard</h1><p class="sub">Your technique analysis history and progress, in one place.</p></div></div>
+  <div id="dashboard-message" class="ref" role="status">Loading your history…</div>
+  <div class="dashboard-stats">
+    <section class="card"><h2>Total Analyses</h2><div class="dashboard-number" id="db-total">—</div><p class="ref">Completed videos</p></section>
+    <section class="card"><h2>Average Technique</h2><div class="dashboard-number" id="db-average">—</div><p class="ref">Score out of 100</p></section>
+    <section class="card"><h2>Sports Analyzed</h2><div class="dashboard-number" id="db-sports">—</div><p class="ref">Different sports</p></section>
+    <section class="card"><h2>Top Sport</h2><div class="dashboard-number dashboard-sport" id="db-top">—</div><p class="ref">Most analyzed</p></section>
+  </div>
+  <section class="card"><div class="dashboard-section"><h2>Technique Improvement</h2><span class="ref">Latest 12 analyses · chronological</span></div><div id="db-chart" class="dashboard-chart"><p class="ref">Your progress graph will appear after you complete analyses.</p></div></section>
+  <section class="card"><h2>Recent Analyses</h2><div id="db-recent"><p class="ref">No saved analyses yet.</p></div></section>
+  <p class="note">Scores are AI estimates from sampled frames, not objective measurements. Historical analyses completed before this feature was installed are not automatically available.</p>
+  <button class="btn" onclick="tab('analyze')">Start analyzing</button>
+</div>
 
 <div id="v-how" class="v hide">
 <section class="about"><div class="in"><h2 class="start">What is AthleScan AI?</h2>
@@ -488,8 +525,12 @@ $("msg").textContent="Analyzing the second half…";$("pb").style.width="80%";
 var prior=(r1.fixes||[]).map(function(x){return (x.area||"")+": "+(x.issue||"")}).join(" | ");
 var r2=await sendAnalysis(B,"second",prior);
 var r=merge(r1,r2,per);
+$("msg").textContent="Saving completed analysis…";
+var finalized=await apiTask({task:"finalize",reservationId:reservationId,sport:sport,result:r});
+if(!finalized.completed)throw Error("Could not finalize your analysis.");
 window.feedbackReservationId=reservationId;
 render(r,fr);
+if(!finalized.historySaved)console.warn("Analysis completed, but dashboard history could not be saved. Install dashboard SQL.");
 }catch(e){
   $("msg").textContent=(e&&e.message)||"Something went wrong. Try a shorter clip.";
   $("pb").style.width="0";
@@ -560,7 +601,41 @@ var Q=[["Get the fundamentals down and the level of everything you do will rise.
 var last=0;["touchstart","pointerdown","wheel"].forEach(function(e){g.addEventListener(e,function(){last=Date.now()},{passive:true})});
 if(matchMedia("(prefers-reduced-motion:reduce)").matches)return;
 setInterval(function(){if(Date.now()-last<5000||document.hidden)return;var w=g.clientWidth;if(!w)return;var i=Math.round(g.scrollLeft/w);g.scrollTo({left:((i+1)%Q.length)*w,behavior:"smooth"})},5000)})();
-function tab(n){["analyze","how"].forEach(function(k){$("v-"+k).classList.toggle("hide",k!==n);var b=$("t-"+k);b.classList.toggle("on",k===n)});scrollTo({top:0});rvAll()}
+
+async function loadDashboard(){
+  var message=$("dashboard-message"), rows=[];
+  message.textContent="Loading your saved analyses…";
+  try{var data=await apiTask({task:"history"});rows=Array.isArray(data.analyses)?data.analyses:[];message.textContent=rows.length?"Your latest saved results":"No saved analyses yet. Complete an analysis to start tracking progress."}
+  catch(error){message.textContent=error.message||"Could not load dashboard.";return}
+  var scores=rows.map(function(x){return Number(x.score)}).filter(function(x){return Number.isFinite(x)&&x>=0&&x<=100});
+  $("db-total").textContent=rows.length;
+  $("db-average").textContent=scores.length?Math.round(scores.reduce(function(a,b){return a+b},0)/scores.length)+"/100":"—";
+  var counts={};rows.forEach(function(x){if(x.sport)counts[x.sport]=(counts[x.sport]||0)+1});
+  $("db-sports").textContent=Object.keys(counts).length;
+  var top=Object.keys(counts).sort(function(a,b){return counts[b]-counts[a]})[0];$("db-top").textContent=top||"—";
+  var recent=$("db-recent");recent.textContent="";
+  if(!rows.length)recent.appendChild(el("p","ref","No analyses saved yet. Analyze a video to get started."));
+  rows.slice(0,10).forEach(function(x){
+    var item=el("div","dashboard-entry"),left=el("div"),right=el("div","dashboard-score",Number.isFinite(Number(x.score))?String(x.score)+"/100":"—");
+    left.appendChild(el("strong",null,(x.sport||"Sport")+(x.action?" · "+x.action:"")));
+    var date=new Date(x.created_at);left.appendChild(el("p","ref",Number.isNaN(date.getTime())?"":date.toLocaleDateString()));
+    if(x.summary)left.appendChild(el("p","ref",x.summary));
+    var fixes=Array.isArray(x.fixes)?x.fixes:[];
+    if(fixes.length){var details=el("details"),summary=el("summary",null,"View saved technique feedback"),ul=el("ul");details.appendChild(summary);fixes.forEach(function(f){ul.appendChild(el("li",null,(f.area?f.area+": ":"")+(f.issue||"")+(f.fix?" — "+f.fix:"")))});details.appendChild(ul);left.appendChild(details)}
+    item.appendChild(left);item.appendChild(right);recent.appendChild(item);
+  });
+  var chart=$("db-chart");chart.textContent="";
+  var points=rows.slice(0,12).reverse().filter(function(x){return Number.isFinite(Number(x.score))});
+  if(points.length<2){chart.appendChild(el("p","ref","Complete at least two analyses to see your progress graph."));return}
+  var ns="http://www.w3.org/2000/svg",svg=document.createElementNS(ns,"svg");svg.setAttribute("viewBox","0 0 640 250");svg.setAttribute("role","img");svg.setAttribute("aria-label","Technique score trend across your latest analyses");
+  function add(name,attrs){var node=document.createElementNS(ns,name);Object.keys(attrs).forEach(function(k){node.setAttribute(k,attrs[k])});svg.appendChild(node);return node}
+  [0,25,50,75,100].forEach(function(n){var y=215-n*1.85;add("line",{x1:42,x2:622,y1:y,y2:y,stroke:"#54313b","stroke-width":1});var t=add("text",{x:7,y:y+4,fill:"#b7a9ad","font-size":12});t.textContent=n});
+  var coords=points.map(function(x,i){return [42+i*580/(points.length-1),215-Number(x.score)*1.85]});
+  add("polyline",{points:coords.map(function(p){return p.join(",")}).join(" "),fill:"none",stroke:"#ed404e","stroke-width":3,"stroke-linecap":"round","stroke-linejoin":"round"});
+  coords.forEach(function(p,i){var c=add("circle",{cx:p[0],cy:p[1],r:5,fill:"#ff7886"});var title=document.createElementNS(ns,"title");title.textContent=(points[i].sport||"Analysis")+": "+points[i].score+"/100";c.appendChild(title)});
+  chart.appendChild(svg);
+}
+function tab(n){["analyze","dashboard","how"].forEach(function(k){$("v-"+k).classList.toggle("hide",k!==n);var b=$("t-"+k);b.classList.toggle("on",k===n)});if(n==="dashboard")loadDashboard();scrollTo({top:0});rvAll()}
 var io=null;
 function rvAll(){if(!("IntersectionObserver" in window)||matchMedia("(prefers-reduced-motion:reduce)").matches)return;
 io=io||new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add("vis");io.unobserve(e.target)}})},{threshold:0.06,rootMargin:"0px 0px 28px 0px"});
