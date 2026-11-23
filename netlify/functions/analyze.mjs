@@ -1,4 +1,4 @@
-// Netlify Function: keeps the Google Gemini API key on the server.
+
 export default async (request) => {
   if (request.method !== "POST") {
     return json({ error: "Use POST for this endpoint." }, 405);
@@ -75,7 +75,7 @@ export default async (request) => {
 
   const validReservationId = (value) =>
     typeof value === "string" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
   // Dashboard history is stored per authenticated account or signed guest cookie.
   if (task === "history") {
@@ -225,17 +225,11 @@ export default async (request) => {
     return (await response.json()) === true;
   }
 
+  // Only cancel a reservation when the frontend explicitly cancels the
+  // complete analysis. Individual Gemini requests must not release it,
+  // because one video analysis makes multiple requests with the same ID.
   async function releaseFailedAnalysis() {
-    if (task !== "analyze") return;
-
-    try {
-      await updateReservation("athlescan_v2_fail");
-    } catch (error) {
-      console.error(
-        "Could not release failed analysis reservation:",
-        error
-      );
-    }
+    return;
   }
 
   if (task === "finalize") {
@@ -247,7 +241,25 @@ export default async (request) => {
     }
     try {
       const completed = await updateReservation("athlescan_v2_consume");
-      if (!completed) return respond({ error: "This analysis reservation is expired or already used. Start a new analysis." }, 403);
+      if (!completed) {
+        // An already-consumed reservation may indicate a retried finalize
+        // request. Check for an existing history record before rejecting it.
+        const existingUrl = supabaseUrl + "/rest/v1/athlescan_analysis_history?" +
+          new URLSearchParams({
+            user_id: "eq." + userId,
+            reservation_id: "eq." + reservationId,
+            select: "id",
+            limit: "1"
+          });
+        const existingResponse = await fetch(existingUrl, { headers: serviceHeaders });
+        if (existingResponse.ok) {
+          const existingRows = await existingResponse.json();
+          if (Array.isArray(existingRows) && existingRows.length > 0) {
+            return respond({ completed: true, historySaved: true, alreadyFinalized: true });
+          }
+        }
+        return respond({ error: "This analysis reservation is expired or already used. Start a new analysis." }, 403);
+      }
       // The analysis is already completed. A history storage problem must not undo it.
       let historySaved = false;
       try {
@@ -583,7 +595,7 @@ async function signGuestCookie(id, secret) {
 }
 
 async function verifyGuestCookie(value, secret) {
-  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
+  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
 
   if (!m) return null;
 
