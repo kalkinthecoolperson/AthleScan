@@ -73,9 +73,9 @@ export default async (request) => {
     "Content-Type": "application/json"
   };
 
-  const validReservationId = (value) =>
-    typeof value === "string" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+const validReservationId = (value) =>
+  typeof value === "string" &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
   // Dashboard history is stored per authenticated account or signed guest cookie.
   if (task === "history") {
