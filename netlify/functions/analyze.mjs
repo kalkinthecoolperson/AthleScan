@@ -1,4 +1,3 @@
-
 // Netlify Function: keeps the Google Gemini API key on the server.
 export default async (request) => {
   if (request.method !== "POST") {
@@ -12,7 +11,7 @@ export default async (request) => {
     return json({ error: "The request was not valid JSON." }, 400);
   }
 
-  const { task, prompt, images, reservationId, rating, sport } = body || {};
+  const { task, prompt, images, reservationId, rating, sport, result } = body || {};
   const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const firebaseProject = "athlescan-auth";
@@ -21,7 +20,7 @@ export default async (request) => {
     return json({ error: "Supabase is not configured in Netlify." }, 500);
   }
 
-  if (!["status", "reserve", "analyze", "plan", "feedback", "cancel"].includes(task)) {
+  if (!["status", "reserve", "analyze", "plan", "feedback", "cancel", "finalize", "history"].includes(task)) {
     return json({ error: "Unknown task." }, 400);
   }
 
@@ -77,6 +76,20 @@ export default async (request) => {
   const validReservationId = (value) =>
     typeof value === "string" &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+  // Dashboard history is stored per authenticated account or signed guest cookie.
+  if (task === "history") {
+    try {
+      const url = supabaseUrl + "/rest/v1/athlescan_analysis_history?" +
+        new URLSearchParams({ user_id: "eq." + userId, select: "id,reservation_id,sport,action,score,summary,strengths,fixes,created_at", order: "created_at.desc", limit: "100" });
+      const r = await fetch(url, { headers: serviceHeaders });
+      if (!r.ok) throw Error("History query failed: " + r.status + " " + (await r.text()).slice(0, 300));
+      return respond({ analyses: await r.json() });
+    } catch (error) {
+      console.error(error);
+      return respond({ error: "Could not load analysis history. Make sure the dashboard SQL has been installed." }, 502);
+    }
+  }
 
   if (task === "status" || task === "reserve") {
     try {
@@ -222,6 +235,44 @@ export default async (request) => {
         "Could not release failed analysis reservation:",
         error
       );
+    }
+  }
+
+  if (task === "finalize") {
+    if (!validReservationId(reservationId) || !result || typeof result !== "object" ||
+        Array.isArray(result) || !Number.isFinite(result.score) ||
+        result.score < 0 || result.score > 100 || typeof sport !== "string" ||
+        !sport.trim() || JSON.stringify(result).length > 25000) {
+      return respond({ error: "Invalid completed analysis." }, 400);
+    }
+    try {
+      const completed = await updateReservation("athlescan_v2_consume");
+      if (!completed) return respond({ error: "This analysis reservation is expired or already used. Start a new analysis." }, 403);
+      // The analysis is already completed. A history storage problem must not undo it.
+      let historySaved = false;
+      try {
+        const entry = {
+          user_id: userId,
+          reservation_id: reservationId,
+          sport: sport.slice(0, 100),
+          action: String(result.action || "").slice(0, 200),
+          score: Math.round(result.score),
+          summary: String(result.summary || "").slice(0, 2500),
+          strengths: Array.isArray(result.strengths) ? result.strengths.slice(0, 8) : [],
+          fixes: Array.isArray(result.fixes) ? result.fixes.slice(0, 8) : []
+        };
+        const saved = await fetch(supabaseUrl + "/rest/v1/athlescan_analysis_history", {
+          method: "POST",
+          headers: { ...serviceHeaders, Prefer: "return=minimal" },
+          body: JSON.stringify(entry)
+        });
+        if (!saved.ok) throw Error("History insert failed: " + saved.status + " " + (await saved.text()).slice(0, 300));
+        historySaved = true;
+      } catch (error) { console.error("Completed analysis history not saved:", error); }
+      return respond({ completed: true, historySaved });
+    } catch (error) {
+      console.error("Could not finalize analysis:", error);
+      return respond({ error: "Could not finalize your analysis. Please try again." }, 502);
     }
   }
 
@@ -388,24 +439,8 @@ export default async (request) => {
       }, 502);
     }
 
-    if (task === "analyze") {
-      let completed;
-
-      try {
-        completed = await updateReservation("athlescan_v2_consume");
-      } catch (error) {
-        console.error("Could not finalize successful analysis:", error);
-        return respond({
-          error: "Could not finalize your analysis. Please try again."
-        }, 502);
-      }
-
-      if (!completed) {
-        return respond({
-          error: "This analysis reservation is expired or already used. Start a new analysis."
-        }, 403);
-      }
-    }
+    // Do not consume the reservation here: one video uses two Gemini calls.
+    // The frontend finalizes only after both halves return successfully.
 
     return respond({ result: parsed }, 200);
 
@@ -548,7 +583,7 @@ async function signGuestCookie(id, secret) {
 }
 
 async function verifyGuestCookie(value, secret) {
-  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
+  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
 
   if (!m) return null;
 
