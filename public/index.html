@@ -310,7 +310,7 @@ html,body{background:#10090c!important;background-image:none!important;backgroun
 .dashboard-number{font-size:clamp(25px,3vw,38px);font-weight:800;line-height:1.2;overflow-wrap:anywhere}
 .dashboard-sport{font-size:clamp(17px,2vw,25px)}
 .dashboard-section{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-.dashboard-chart{min-height:180px;display:flex;align-items:center;justify-content:center}
+.dashboard-sport-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 10px}.dashboard-sport-tabs button{background:#201519;color:#f7f1f2;border:1px solid #803541;border-radius:8px;padding:9px 14px;font:inherit;font-size:13px;font-weight:650;cursor:pointer}.dashboard-sport-tabs button[aria-selected="true"]{background:#6b2330;border-color:#ff5264;box-shadow:0 0 0 1px rgba(255,82,100,.2)}.dashboard-sport-tabs button:focus-visible{outline:2px solid #ff8c98;outline-offset:2px}.dashboard-chart{min-height:180px;display:flex;align-items:center;justify-content:center}
 .dashboard-chart svg{display:block;width:100%;height:auto;max-height:280px}
 .dashboard-entry{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:15px 0;border-top:1px solid var(--line)}
 .dashboard-entry:first-child{border-top:0}
@@ -370,7 +370,7 @@ html,body{background:#10090c!important;background-image:none!important;backgroun
     <section class="card"><h2>Sports Analyzed</h2><div class="dashboard-number" id="db-sports">—</div><p class="ref">Different sports</p></section>
     <section class="card"><h2>Top Sport</h2><div class="dashboard-number dashboard-sport" id="db-top">—</div><p class="ref">Most analyzed</p></section>
   </div>
-  <section class="card"><div class="dashboard-section"><h2>Technique Improvement</h2><span class="ref">Latest 12 analyses · chronological</span></div><div id="db-chart" class="dashboard-chart"><p class="ref">Your progress graph will appear after you complete analyses.</p></div></section>
+  <section class="card"><div class="dashboard-section"><h2>Technique Improvement</h2><span class="ref" id="db-chart-caption">Latest 12 analyses · chronological</span></div><div id="db-sport-tabs" class="dashboard-sport-tabs" role="tablist" aria-label="Sport progress charts"></div><div id="db-chart" class="dashboard-chart"><p class="ref">Your progress graph will appear after you complete analyses.</p></div></section>
   <section class="card"><h2>Recent Analyses</h2><div id="db-recent"><p class="ref">No saved analyses yet.</p></div></section>
   <p class="note">Scores are AI estimates from sampled frames, not objective measurements. Historical analyses completed before this feature was installed are not automatically available.</p>
   <button class="btn" onclick="tab('analyze')">Start analyzing</button>
@@ -624,10 +624,29 @@ async function loadDashboard(){
     if(fixes.length){var details=el("details"),summary=el("summary",null,"View saved technique feedback"),ul=el("ul");details.appendChild(summary);fixes.forEach(function(f){ul.appendChild(el("li",null,(f.area?f.area+": ":"")+(f.issue||"")+(f.fix?" — "+f.fix:"")))});details.appendChild(ul);left.appendChild(details)}
     item.appendChild(left);item.appendChild(right);recent.appendChild(item);
   });
+  renderSportTabs(rows);
+}
+var dashboardSelectedSport="__all__";
+function renderSportTabs(rows){
+  var tabs=$("db-sport-tabs");tabs.textContent="";
+  var sports=Array.from(new Set(rows.map(function(x){return typeof x.sport==="string"?x.sport.trim():""}).filter(Boolean))).sort(function(a,b){return a.localeCompare(b)});
+  if(dashboardSelectedSport!=="__all__"&&!sports.includes(dashboardSelectedSport))dashboardSelectedSport="__all__";
+  [{name:"All Sports",key:"__all__"}].concat(sports.map(function(s){return {name:s,key:s}})).forEach(function(option){
+    var button=el("button",null,option.name);
+    button.type="button";button.setAttribute("role","tab");
+    button.setAttribute("aria-selected",String(dashboardSelectedSport===option.key));
+    button.onclick=function(){dashboardSelectedSport=option.key;renderSportTabs(rows)};
+    tabs.appendChild(button);
+  });
+  var selected=dashboardSelectedSport==="__all__"?rows:rows.filter(function(x){return (x.sport||"").trim()===dashboardSelectedSport});
+  $("db-chart-caption").textContent=(dashboardSelectedSport==="__all__"?"All sports":dashboardSelectedSport)+" · latest 12 analyses · chronological";
+  drawDashboardChart(selected);
+}
+function drawDashboardChart(rows){
   var chart=$("db-chart");chart.textContent="";
-  var points=rows.slice(0,12).reverse().filter(function(x){return Number.isFinite(Number(x.score))});
-  if(points.length<2){chart.appendChild(el("p","ref","Complete at least two analyses to see your progress graph."));return}
-  var ns="http://www.w3.org/2000/svg",svg=document.createElementNS(ns,"svg");svg.setAttribute("viewBox","0 0 640 250");svg.setAttribute("role","img");svg.setAttribute("aria-label","Technique score trend across your latest analyses");
+  var points=rows.filter(function(x){return x.score!==null&&x.score!==undefined&&Number.isFinite(Number(x.score))&&Number(x.score)>=0&&Number(x.score)<=100}).slice(0,12).reverse();
+  if(points.length<2){chart.appendChild(el("p","ref",points.length===1?"Complete one more analysis in this category to see your progress graph.":"Complete at least two analyses in this category to see your progress graph."));return}
+  var ns="http://www.w3.org/2000/svg",svg=document.createElementNS(ns,"svg");svg.setAttribute("viewBox","0 0 640 250");svg.setAttribute("role","img");svg.setAttribute("aria-label","Technique score trend for "+(dashboardSelectedSport==="__all__"?"all sports":dashboardSelectedSport));
   function add(name,attrs){var node=document.createElementNS(ns,name);Object.keys(attrs).forEach(function(k){node.setAttribute(k,attrs[k])});svg.appendChild(node);return node}
   [0,25,50,75,100].forEach(function(n){var y=215-n*1.85;add("line",{x1:42,x2:622,y1:y,y2:y,stroke:"#54313b","stroke-width":1});var t=add("text",{x:7,y:y+4,fill:"#b7a9ad","font-size":12});t.textContent=n});
   var coords=points.map(function(x,i){return [42+i*580/(points.length-1),215-Number(x.score)*1.85]});
