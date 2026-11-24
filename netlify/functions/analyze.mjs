@@ -295,6 +295,7 @@ const validReservationId = (value) =>
 
     try {
       const released = await updateReservation("athlescan_v2_fail");
+      if (!released) console.warn("Reservation cancellation returned false; reservation may already be closed.");
       return respond({ released });
     } catch (error) {
       console.error("Could not cancel reservation:", error);
@@ -388,7 +389,7 @@ const validReservationId = (value) =>
       }
     );
 
-    const result = await upstream.json();
+    const result = await upstream.json().catch(() => null);
 
     if (!upstream.ok) {
       await releaseFailedAnalysis();
@@ -595,7 +596,7 @@ async function signGuestCookie(id, secret) {
 }
 
 async function verifyGuestCookie(value, secret) {
-  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
+  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
 
   if (!m) return null;
 
