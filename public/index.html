@@ -523,6 +523,7 @@ function merge(a,b,per){
     fixes:all};
 }
 $("go").onclick=async function(){
+if(analysisRunning)return;
 analysisRunning=true;upd();$("out").classList.add("hide");$("busy").classList.remove("hide");$("msg").textContent="Grabbing key frames…";$("pb").style.width="5%";
 var reservationId=null;
 try{
@@ -554,21 +555,22 @@ if(!finalized.historySaved)console.warn("Analysis completed, but dashboard histo
 }catch(e){
   $("msg").textContent=(e&&e.message)||"Something went wrong. Try a shorter clip.";
   $("pb").style.width="0";
-  analysisRunning=false;
   if(reservationId){
   try{
-    await apiTask({task:"cancel",reservationId:reservationId});
+    var cancellation=await apiTask({task:"cancel",reservationId:reservationId});
+    if(!cancellation.released)console.warn("Reservation was not released; it may already be closed.");
   }catch(cancelError){
     console.warn("Could not cancel unfinished reservation:",cancelError);
   }
 }
 await refreshQuota();
+  analysisRunning=false;
   upd();
   return;
 }
 $("busy").classList.add("hide");
-analysisRunning=false;
 await refreshQuota();
+analysisRunning=false;
 upd();
 };
 
