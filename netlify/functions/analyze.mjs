@@ -545,8 +545,20 @@ export default async (request) => {
   }
 
   const parts = [{
-    text: prompt.slice(0, 18000)
-  }];
+  text: prompt.slice(0, 18000) + (
+    task === "analyze"
+      ? "\n\nPRIORITY FIX REQUIREMENTS:\n" +
+        "- Examine all supplied frames before selecting fixes.\n" +
+        "- Aim for 3–5 distinct priority fixes when supported by visual evidence.\n" +
+        "- Examine setup, execution, control, and finish.\n" +
+        "- Use an integer frame number between 1 and " + images?.length + ".\n" +
+        "- Use lowercase confidence values: high, medium, or low.\n" +
+        "- Do not repeat the same correction in different words.\n" +
+        "- Return fewer fixes only when the evidence genuinely supports fewer.\n" +
+        "- Never invent technique problems."
+      : ""
+  )
+}];
 
   if (task === "analyze") {
     if (
