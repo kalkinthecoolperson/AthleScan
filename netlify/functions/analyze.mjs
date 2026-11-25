@@ -1,10 +1,10 @@
-
 export default async (request) => {
   if (request.method !== "POST") {
     return json({ error: "Use POST for this endpoint." }, 405);
   }
 
   let body;
+
   try {
     body = await request.json();
   } catch {
@@ -544,21 +544,26 @@ export default async (request) => {
     }, 500);
   }
 
+  // ---------------------------------------
+  // PRIORITY FIX INSTRUCTIONS
+  // ---------------------------------------
+
   const parts = [{
-  text: prompt.slice(0, 18000) + (
-    task === "analyze"
-      ? "\n\nPRIORITY FIX REQUIREMENTS:\n" +
-        "- Examine all supplied frames before selecting fixes.\n" +
-        "- Aim for 3–5 distinct priority fixes when supported by visual evidence.\n" +
-        "- Examine setup, execution, control, and finish.\n" +
-        "- Use an integer frame number between 1 and " + images?.length + ".\n" +
-        "- Use lowercase confidence values: high, medium, or low.\n" +
-        "- Do not repeat the same correction in different words.\n" +
-        "- Return fewer fixes only when the evidence genuinely supports fewer.\n" +
-        "- Never invent technique problems."
-      : ""
-  )
-}];
+    text: prompt.slice(0, 18000) + (
+      task === "analyze"
+        ? "\n\nPRIORITY FIX REQUIREMENTS:\n" +
+          "- Examine all supplied frames before selecting fixes.\n" +
+          "- Aim for 3–5 distinct priority fixes when supported by visual evidence.\n" +
+          "- Examine setup, execution, control, and finish.\n" +
+          "- Use an integer frame number between 1 and " +
+          (Array.isArray(images) ? images.length : 0) + ".\n" +
+          "- Use lowercase confidence values: high, medium, or low.\n" +
+          "- Do not repeat the same correction in different words.\n" +
+          "- Return fewer fixes only when the evidence genuinely supports fewer.\n" +
+          "- Never invent technique problems."
+        : ""
+    )
+  }];
 
   if (task === "analyze") {
     if (
@@ -584,7 +589,10 @@ export default async (request) => {
       }, 400);
     }
 
-    for (const image of images) {
+    // Every frame receives a unique sequential label,
+    // even when two frames contain identical image data.
+
+    for (const [frameIndex, image] of images.entries()) {
       if (
         typeof image !== "string" ||
         !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(image) ||
@@ -598,15 +606,16 @@ export default async (request) => {
       }
 
       parts.push({
-  text: "Frame " + (images.indexOf(image) + 1) + " of " + images.length
-});
+        text: "Frame " + (frameIndex + 1) +
+          " of " + images.length
+      });
 
-parts.push({
-  inlineData: {
-    mimeType: "image/jpeg",
-    data: image.slice(image.indexOf(",") + 1)
-  }
-});
+      parts.push({
+        inlineData: {
+          mimeType: "image/jpeg",
+          data: image.slice(image.indexOf(",") + 1)
+        }
+      });
     }
 
     // Atomically claim the reservation.
@@ -803,9 +812,15 @@ parts.push({
       }, 502);
     }
 
+    // Ignore non-text parts and internal thought parts.
+
     const text = result
       ?.candidates?.[0]?.content?.parts
-      ?.map(part => part.text || "")
+      ?.map(part =>
+        typeof part?.text === "string" && !part.thought
+          ? part.text
+          : ""
+      )
       .join("")
       .trim();
 
@@ -886,7 +901,9 @@ parts.push({
       if (
         !weight ||
         typeof parsed.action !== "string" ||
-        typeof parsed.summary !== "string"
+        !parsed.action.trim() ||
+        typeof parsed.summary !== "string" ||
+        !parsed.summary.trim()
       ) {
         await releaseFailedAnalysis();
 
@@ -897,37 +914,46 @@ parts.push({
 
       parsed.score = Math.round(total / weight);
 
-    const rawFixes = Array.isArray(parsed.fixes)
-  ? parsed.fixes
-  : [];
+      // ---------------------------------------
+      // PRIORITY FIX NORMALIZATION
+      // ---------------------------------------
 
-parsed.fixes = rawFixes
-  .filter(f => f && typeof f === "object" && !Array.isArray(f))
-  .map(f => ({
-    ...f,
-    frame:
-      typeof f.frame === "string" && /^\d+$/.test(f.frame.trim())
-        ? Number(f.frame.trim())
-        : f.frame,
-    confidence:
-      typeof f.confidence === "string"
-        ? f.confidence.trim().toLowerCase()
-        : f.confidence
-  }))
-  .filter(f =>
-    Number.isInteger(f.frame) &&
-    f.frame >= 1 &&
-    f.frame <= images.length &&
-    f.confidence !== "low"
-  )
-  .slice(0, 5);
+      const rawFixes = Array.isArray(parsed.fixes)
+        ? parsed.fixes
+        : [];
 
-console.info("Priority fix diagnostics:", {
-  generated: rawFixes.length,
-  accepted: parsed.fixes.length,
-  discarded: rawFixes.length - parsed.fixes.length,
-  availableFrames: images.length
-});
+      parsed.fixes = rawFixes
+        .filter(f =>
+          f &&
+          typeof f === "object" &&
+          !Array.isArray(f)
+        )
+        .map(f => ({
+          ...f,
+          frame:
+            typeof f.frame === "string" &&
+            /^\d+$/.test(f.frame.trim())
+              ? Number(f.frame.trim())
+              : f.frame,
+          confidence:
+            typeof f.confidence === "string"
+              ? f.confidence.trim().toLowerCase()
+              : f.confidence
+        }))
+        .filter(f =>
+          Number.isInteger(f.frame) &&
+          f.frame >= 1 &&
+          f.frame <= images.length &&
+          ["high", "medium"].includes(f.confidence)
+        )
+        .slice(0, 5);
+
+      console.info("Priority fix diagnostics:", {
+        generated: rawFixes.length,
+        accepted: parsed.fixes.length,
+        discarded: rawFixes.length - parsed.fixes.length,
+        availableFrames: images.length
+      });
 
       // ---------------------------------------
       // ATOMIC FINALIZATION
