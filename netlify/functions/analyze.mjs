@@ -1,4 +1,3 @@
-
 export default async (request) => {
   if (request.method !== "POST") {
     return json({ error: "Use POST for this endpoint." }, 405);
@@ -225,31 +224,72 @@ export default async (request) => {
     }
   }
 
-  async function updateReservation(rpc) {
-    const response = await fetch(supabaseUrl + "/rest/v1/rpc/" + rpc, {
-      method: "POST",
-      headers: serviceHeaders,
-      body: JSON.stringify({
-        p_reservation_id: reservationId,
-        p_user_id: userId
-      })
-    });
+  const reservationArgs = {
+    p_reservation_id: reservationId,
+    p_user_id: userId
+  };
 
-    if (!response.ok) {
-      throw Error(
-        rpc + " failed: " + response.status + " " +
-        (await response.text()).slice(0, 300)
-      );
-    }
+  let claimed = false;
+  let finalizationStarted = false;
 
-    return (await response.json()) === true;
+  async function updateReservation(name) {
+    return (await rpc(name, reservationArgs)) === true;
   }
 
-  // Only cancel a reservation when the frontend explicitly cancels the
-  // complete analysis. Individual Gemini requests must not release it,
-  // because one video analysis makes multiple requests with the same ID.
   async function releaseFailedAnalysis() {
-    return;
+    if (
+      task !== "analyze" ||
+      !validReservationId(reservationId) ||
+      finalizationStarted
+    ) return;
+
+    const name = claimed
+      ? "athlescan_v2_fail"
+      : "athlescan_v2_cancel";
+
+    for (let i = 0; i < 2; i++) {
+      try {
+        await updateReservation(name);
+        return;
+      } catch (error) {
+        console.warn(
+          "Reservation cleanup failed:",
+          error.message
+        );
+      }
+    }
+  }
+
+  async function historyExists() {
+    try {
+      const query = new URLSearchParams({
+        user_id: "eq." + userId,
+        reservation_id: "eq." + reservationId,
+        select: "id",
+        limit: "1"
+      });
+
+      const response = await fetch(
+        supabaseUrl +
+        "/rest/v1/athlescan_analysis_history?" +
+        query,
+        {
+          headers: serviceHeaders,
+          signal: AbortSignal.timeout(5000)
+        }
+      );
+
+      return response.ok &&
+        (await response.json()).length > 0;
+
+    } catch (error) {
+      console.warn(
+        "History recovery failed:",
+        error.message
+      );
+
+      return false;
+    }
   }
 
   async function rpc(name, args) {
@@ -281,7 +321,7 @@ export default async (request) => {
     }
 
     try {
-      const released = await updateReservation("athlescan_v2_fail");
+      const released = await updateReservation("athlescan_v2_cancel");
 
       if (!released) {
         console.warn(
@@ -367,6 +407,8 @@ export default async (request) => {
 
   if (task === "analyze") {
     if (typeof sport !== "string" || !sport.trim()) {
+      await releaseFailedAnalysis();
+
       return respond({
         error: "Select a sport."
       }, 400);
@@ -378,8 +420,12 @@ export default async (request) => {
           error: "Analysis already started or expired. Refresh and try again."
         }, 409);
       }
+
+      claimed = true;
+
     } catch (e) {
       console.error(e);
+      await releaseFailedAnalysis();
 
       return respond({
         error: "Could not verify analysis reservation."
@@ -592,6 +638,8 @@ export default async (request) => {
         typeof parsed.action !== "string" ||
         typeof parsed.summary !== "string"
       ) {
+        await releaseFailedAnalysis();
+
         return respond({
           error: "Incomplete technique assessment. Try a clearer clip."
         }, 502);
@@ -618,6 +666,7 @@ export default async (request) => {
         p_result: parsed
       };
 
+      finalizationStarted = true;
       let saved = false;
 
       for (let i = 0; i < 2; i++) {
@@ -627,6 +676,10 @@ export default async (request) => {
         } catch (e) {
           console.error("Finalize attempt", e.message);
         }
+      }
+
+      if (saved !== true) {
+        saved = await historyExists();
       }
 
       if (saved !== true) {
