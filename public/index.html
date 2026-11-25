@@ -326,7 +326,7 @@ html,body{background:#10090c!important;background-image:none!important;backgroun
 .dashboard-entry strong{display:block}
 .dashboard-entry .ref{margin:3px 0}
 .dashboard-entry .dashboard-score{font-size:23px;font-weight:800;color:#ff7886;white-space:nowrap}
-.dashboard-delete{display:block;margin-top:10px;padding:7px 10px;border:1px solid #a52b39;border-radius:7px;background:transparent;color:#ff7886;font:inherit;font-size:12px;cursor:pointer}.dashboard-delete:disabled{opacity:.5;cursor:wait}
+.dashboard-actions{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}.dashboard-delete{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:6px;background:transparent;color:#ff9ab5;cursor:pointer}.dashboard-delete:hover{background:rgba(255,154,181,.12)}.dashboard-delete:focus-visible{outline:2px solid #ff9ab5;outline-offset:2px}.dashboard-delete:disabled{opacity:.5;cursor:wait}.dashboard-delete svg{width:16px;height:16px;pointer-events:none}
 .dashboard-entry details{margin-top:8px;font-size:13px;color:var(--mute)}
 .dashboard-entry summary{cursor:pointer;color:#f7d4d9}
 @media(max-width:760px){.dashboard-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-head{align-items:flex-start}.dashboard-new{font-size:12px;padding:9px}.top{gap:12px}}
@@ -634,7 +634,8 @@ async function loadDashboard(){
     if(x.summary)left.appendChild(el("p","ref",x.summary));
     var fixes=Array.isArray(x.fixes)?x.fixes:[];
     if(fixes.length){var details=el("details"),summary=el("summary",null,"View saved technique feedback"),ul=el("ul");details.appendChild(summary);fixes.forEach(function(f){ul.appendChild(el("li",null,(f.area?f.area+": ":"")+(f.issue||"")+(f.fix?" — "+f.fix:"")))});details.appendChild(ul);left.appendChild(details)}
-    var del=el("button","dashboard-delete","Delete");del.type="button";
+    var del=el("button","dashboard-delete");del.type="button";del.title="Delete analysis";
+    del.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';
     del.setAttribute("aria-label","Delete saved "+(x.sport||"sport")+" analysis");
     del.onclick=async function(){
       if(!confirm("Permanently delete this analysis? Your remaining uses will not change."))return;
@@ -642,7 +643,7 @@ async function loadDashboard(){
       try{await apiTask({task:"delete",reservationId:x.reservation_id});await loadDashboard()}
       catch(error){message.textContent=error.message||"Could not delete analysis.";del.disabled=false}
     };
-    var actions=el("div");actions.appendChild(right);if(x.reservation_id)actions.appendChild(del);
+    var actions=el("div","dashboard-actions");if(x.reservation_id)actions.appendChild(del);actions.appendChild(right);
     item.appendChild(left);item.appendChild(actions);recent.appendChild(item);
   });
   renderSportTabs(rows);
