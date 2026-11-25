@@ -508,7 +508,7 @@ export default async (request) => {
               ],
               generationConfig: {
                 thinkingConfig: {
-                  thinkingLevel: "LOW"
+                  thinkingLevel: task === "analyze" ? "MEDIUM" : "LOW"
                 },
                 maxOutputTokens: task === "plan" ? 1800 : 3200,
                 responseMimeType: "application/json"
