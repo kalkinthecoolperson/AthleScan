@@ -598,11 +598,15 @@ export default async (request) => {
       }
 
       parts.push({
-        inlineData: {
-          mimeType: "image/jpeg",
-          data: image.slice(image.indexOf(",") + 1)
-        }
-      });
+  text: "Frame " + (images.indexOf(image) + 1) + " of " + images.length
+});
+
+parts.push({
+  inlineData: {
+    mimeType: "image/jpeg",
+    data: image.slice(image.indexOf(",") + 1)
+  }
+});
     }
 
     // Atomically claim the reservation.
