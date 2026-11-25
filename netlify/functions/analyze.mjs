@@ -19,7 +19,7 @@ export default async (request) => {
     return json({ error: "Supabase is not configured in Netlify." }, 500);
   }
 
-  if (!["status", "reserve", "analyze", "plan", "feedback", "cancel", "finalize", "history"].includes(task)) {
+  if (!["status", "reserve", "analyze", "plan", "feedback", "cancel", "finalize", "history", "delete"].includes(task)) {
     return json({ error: "Unknown task." }, 400);
   }
 
@@ -76,6 +76,25 @@ export default async (request) => {
   const validReservationId = (value) =>
     typeof value === "string" &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+  if (task === "delete") {
+    if (!validReservationId(reservationId)) {
+      return respond({ error: "Invalid analysis reference." }, 400);
+    }
+    try {
+      const deleted = await rpc("athlescan_delete_analysis", {
+        p_reservation_id: reservationId,
+        p_user_id: userId
+      });
+      if (deleted !== true) {
+        return respond({ error: "Analysis not found." }, 404);
+      }
+      return respond({ deleted: true });
+    } catch (error) {
+      console.error("Analysis deletion failed:", error.message);
+      return respond({ error: "Could not delete analysis. Refresh your dashboard and try again." }, 502);
+    }
+  }
 
   // Dashboard history is stored per authenticated account or signed guest cookie.
   if (task === "history") {
