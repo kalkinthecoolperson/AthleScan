@@ -4,7 +4,6 @@ export default async (request) => {
   }
 
   let body;
-
   try {
     body = await request.json();
   } catch {
@@ -12,13 +11,8 @@ export default async (request) => {
   }
 
   const {
-    task,
-    prompt,
-    images,
-    frameTimes,
-    reservationId,
-    rating,
-    sport
+    task, prompt, images, frameTimes,
+    reservationId, rating, sport
   } = body || {};
 
   const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
@@ -30,17 +24,9 @@ export default async (request) => {
   }
 
   const allowedTasks = [
-    "status",
-    "reserve",
-    "analyze",
-    "plan",
-    "feedback",
-    "cancel",
-    "finalize",
-    "history",
-    "delete",
-    "deleteAnalysis",
-    "delete_analysis"
+    "status", "reserve", "analyze", "plan", "feedback",
+    "cancel", "finalize", "history", "delete",
+    "deleteAnalysis", "delete_analysis"
   ];
 
   if (!allowedTasks.includes(task)) {
@@ -58,7 +44,6 @@ export default async (request) => {
   }
 
   const bearer = request.headers.get("authorization") || "";
-
   let userId;
   let guestCookie = null;
 
@@ -72,11 +57,9 @@ export default async (request) => {
         bearer.replace(/^Bearer /i, ""),
         firebaseProject
       );
-
       userId = "firebase:" + user.uid;
     } catch (e) {
       console.error("Firebase authentication failed:", e.message);
-
       return json({
         error: "Your Google sign-in is invalid or expired. Please sign in again."
       }, 401);
@@ -84,14 +67,12 @@ export default async (request) => {
   } else {
     const cookies = request.headers.get("cookie") || "";
     const match = cookies.match(/(?:^|;\s*)athlescan_guest=([^;]+)/);
-
     let existing = null;
 
     if (match) {
       try {
         existing = await verifyGuestCookie(
-          decodeURIComponent(match[1]),
-          serviceKey
+          decodeURIComponent(match[1]), serviceKey
         );
       } catch {
         existing = null;
@@ -99,12 +80,10 @@ export default async (request) => {
     }
 
     const guestId = existing || crypto.randomUUID();
-
     userId = "guest:" + guestId;
 
     if (!existing) {
       const value = await signGuestCookie(guestId, serviceKey);
-
       guestCookie =
         "athlescan_guest=" +
         encodeURIComponent(value) +
@@ -145,9 +124,7 @@ export default async (request) => {
     );
 
     if (!response.ok) {
-      throw new Error(
-        name + " failed: " + response.status
-      );
+      throw new Error(name + " failed: " + response.status);
     }
 
     return await response.json();
@@ -157,14 +134,8 @@ export default async (request) => {
     if (!validReservationId(reservationId)) {
       return false;
     }
-
-    return (
-      await rpc(name, reservationArgs)
-    ) === true;
+    return (await rpc(name, reservationArgs)) === true;
   }
-
-  // Safe to retry because this function cannot cancel a
-  // reservation that has already been claimed.
 
   async function cancelUnstartedReservation() {
     if (
@@ -176,24 +147,14 @@ export default async (request) => {
 
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        return await updateReservation(
-          "athlescan_v2_cancel"
-        );
+        return await updateReservation("athlescan_v2_cancel");
       } catch (error) {
-        console.error(
-          "Reservation cancellation failed:",
-          error.message
-        );
+        console.error("Reservation cancellation failed:", error.message);
       }
     }
 
     return false;
   }
-
-  // Only the request that successfully claimed the
-  // reservation may release it after processing fails.
-  // Never release a reservation after an uncertain
-  // finalization, since the database may have committed.
 
   async function releaseFailedAnalysis() {
     if (
@@ -207,9 +168,7 @@ export default async (request) => {
 
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const released = await updateReservation(
-          "athlescan_v2_fail"
-        );
+        const released = await updateReservation("athlescan_v2_fail");
 
         if (released) {
           claimedByThisRequest = false;
@@ -217,10 +176,7 @@ export default async (request) => {
 
         return released;
       } catch (error) {
-        console.error(
-          "Reservation recovery failed:",
-          error.message
-        );
+        console.error("Reservation recovery failed:", error.message);
       }
     }
 
@@ -240,9 +196,7 @@ export default async (request) => {
     });
 
     const response = await fetch(
-      supabaseUrl +
-      "/rest/v1/athlescan_analysis_history?" +
-      query,
+      supabaseUrl + "/rest/v1/athlescan_analysis_history?" + query,
       {
         headers: serviceHeaders,
         signal: AbortSignal.timeout(5000)
@@ -254,10 +208,7 @@ export default async (request) => {
     }
 
     const rows = await response.json();
-
-    return Array.isArray(rows)
-      ? rows[0] || null
-      : null;
+    return Array.isArray(rows) ? rows[0] || null : null;
   }
 
   // ---------------------------------------
@@ -274,9 +225,7 @@ export default async (request) => {
       });
 
       const response = await fetch(
-        supabaseUrl +
-        "/rest/v1/athlescan_analysis_history?" +
-        query,
+        supabaseUrl + "/rest/v1/athlescan_analysis_history?" + query,
         {
           headers: serviceHeaders,
           signal: AbortSignal.timeout(5000)
@@ -284,17 +233,12 @@ export default async (request) => {
       );
 
       if (!response.ok) {
-        throw new Error(
-          "History query failed: " + response.status
-        );
+        throw new Error("History query failed: " + response.status);
       }
 
-      return respond({
-        analyses: await response.json()
-      });
+      return respond({ analyses: await response.json() });
     } catch (error) {
       console.error(error);
-
       return respond({
         error: "Could not load analysis history. Please try again."
       }, 502);
@@ -311,9 +255,7 @@ export default async (request) => {
     task === "delete_analysis"
   ) {
     if (!validReservationId(reservationId)) {
-      return respond({
-        error: "Invalid analysis reference."
-      }, 400);
+      return respond({ error: "Invalid analysis reference." }, 400);
     }
 
     try {
@@ -328,16 +270,9 @@ export default async (request) => {
         }, 404);
       }
 
-      return respond({
-        deleted: true,
-        success: true
-      });
+      return respond({ deleted: true, success: true });
     } catch (error) {
-      console.error(
-        "Analysis deletion failed:",
-        error.message
-      );
-
+      console.error("Analysis deletion failed:", error.message);
       return respond({
         error: "Could not confirm deletion. Refresh your dashboard before trying again."
       }, 502);
@@ -354,10 +289,7 @@ export default async (request) => {
         ? "athlescan_v2_status"
         : "athlescan_v2_reserve";
 
-      const data = await rpc(
-        name,
-        { p_user_id: userId }
-      );
+      const data = await rpc(name, { p_user_id: userId });
 
       if (!data || typeof data !== "object") {
         throw new Error("Invalid usage response");
@@ -374,8 +306,7 @@ export default async (request) => {
         const retryDate = new Date(data.retry_at);
 
         const retryMessage =
-          data.retry_at &&
-          Number.isFinite(retryDate.getTime())
+          data.retry_at && Number.isFinite(retryDate.getTime())
             ? "User limit reached. Try again at " +
               retryDate.toLocaleString() + "."
             : "User limit reached. Please try again later.";
@@ -388,9 +319,7 @@ export default async (request) => {
       }
 
       if (!validReservationId(data.reservation_id)) {
-        throw new Error(
-          "Reservation ID missing or invalid"
-        );
+        throw new Error("Reservation ID missing or invalid");
       }
 
       return respond({
@@ -399,7 +328,6 @@ export default async (request) => {
       });
     } catch (error) {
       console.error(error);
-
       return respond({
         error: task === "status"
           ? "Could not check your analysis limit. Please try again."
@@ -426,8 +354,7 @@ export default async (request) => {
 
     try {
       const response = await fetch(
-        supabaseUrl +
-        "/rest/v1/rpc/athlescan_submit_feedback",
+        supabaseUrl + "/rest/v1/rpc/athlescan_submit_feedback",
         {
           method: "POST",
           headers: serviceHeaders,
@@ -450,10 +377,7 @@ export default async (request) => {
           }, 409);
         }
 
-        throw new Error(
-          "Feedback RPC failed: " +
-          response.status
-        );
+        throw new Error("Feedback RPC failed: " + response.status);
       }
 
       if (await response.json() !== true) {
@@ -465,7 +389,6 @@ export default async (request) => {
       return respond({ saved: true });
     } catch (error) {
       console.error(error);
-
       return respond({
         error: "Could not save feedback. Please try again."
       }, 502);
@@ -488,23 +411,14 @@ export default async (request) => {
 
   if (task === "cancel") {
     if (!validReservationId(reservationId)) {
-      return respond({
-        error: "Invalid reservation."
-      }, 400);
+      return respond({ error: "Invalid reservation." }, 400);
     }
 
     try {
-      const released = await updateReservation(
-        "athlescan_v2_cancel"
-      );
-
+      const released = await updateReservation("athlescan_v2_cancel");
       return respond({ released });
     } catch (error) {
-      console.error(
-        "Could not cancel reservation:",
-        error.message
-      );
-
+      console.error("Could not cancel reservation:", error.message);
       return respond({
         error: "Could not confirm reservation cancellation."
       }, 502);
@@ -524,12 +438,8 @@ export default async (request) => {
     }, 403);
   }
 
-  if (
-    typeof prompt !== "string" ||
-    !prompt.trim()
-  ) {
+  if (typeof prompt !== "string" || !prompt.trim()) {
     await cancelUnstartedReservation();
-
     return respond({
       error: "The request is missing its prompt."
     }, 400);
@@ -539,7 +449,6 @@ export default async (request) => {
 
   if (!apiKey) {
     await cancelUnstartedReservation();
-
     return respond({
       error: "The AI service is not configured yet. Ask the site administrator to check GEMINI_API_KEY in Netlify."
     }, 500);
@@ -553,29 +462,29 @@ export default async (request) => {
     text: prompt.slice(0, 18000) + (
       task === "analyze"
         ? "\n\nPRIORITY FIX REQUIREMENTS:\n" +
-          "- Examine all supplied frames before selecting fixes.\n" +
-          "- Return zero to five distinct fixes, with no minimum. Evidence must be directly visible. Include evidence, visibility (clear or uncertain), exact timestamp from the frame label, and annotationConfidence (high or low). Never infer hidden body parts. Use null coordinates when uncertain.\n" +
-          "- Examine setup, execution, control, and finish.\n" +
+          "- Examine every supplied frame before selecting corrections.\n" +
+          "- Aim for 3–5 distinct actionable corrections when supported by visible evidence. There is no mandatory minimum.\n" +
+          "- Do not stop examining technique after identifying the first issue.\n" +
+          "- Systematically examine setup, execution, control, finish, and all relevant sport-specific criteria.\n" +
+          "- Multiple corrections may reference the same frame if they describe distinct technique issues.\n" +
+          "- Every correction must include specific visible evidence, visibility (clear or uncertain), and the exact timestamp of its cited frame.\n" +
           "- Use an integer frame number between 1 and " +
           (Array.isArray(images) ? images.length : 0) + ".\n" +
-          "- Use lowercase confidence values: high, medium, or low.\n" +
+          "- Use lowercase observation confidence values: high, medium, or low.\n" +
+          "- Assess annotationConfidence independently of observation confidence. A medium-confidence correction may have a high-confidence annotation location.\n" +
+          "- Use high annotation confidence when the relevant visible body part or equipment can be located precisely. Otherwise use low annotation confidence and null coordinates.\n" +
+          "- Coordinates must be normalized to the image dimensions, between 0 and 1.\n" +
           "- Do not repeat the same correction in different words.\n" +
-          "- No correction quota. Omit unsupported findings, including those based on submerged or obscured anatomy.\n" +
-          "- Never invent technique problems."
+          "- Omit unsupported findings. Never infer the position of obscured anatomy or equipment.\n" +
+          "- Return fewer corrections when the evidence genuinely supports fewer. Never invent technique problems."
         : ""
     )
   }];
 
   if (task === "analyze") {
-    if (
-      typeof sport !== "string" ||
-      !sport.trim()
-    ) {
+    if (typeof sport !== "string" || !sport.trim()) {
       await cancelUnstartedReservation();
-
-      return respond({
-        error: "Select a sport."
-      }, 400);
+      return respond({ error: "Select a sport." }, 400);
     }
 
     if (
@@ -584,7 +493,6 @@ export default async (request) => {
       images.length > 6
     ) {
       await cancelUnstartedReservation();
-
       return respond({
         error: "Each analysis request must contain 1–6 frames."
       }, 400);
@@ -597,21 +505,14 @@ export default async (request) => {
         typeof t === "string" &&
         /^\d+\.\d{2}$/.test(t) &&
         Number.isFinite(Number(t)) &&
-        (
-          i === 0 ||
-          Number(t) >= Number(frameTimes[i - 1])
-        )
+        (i === 0 || Number(t) >= Number(frameTimes[i - 1]))
       )
     ) {
       await cancelUnstartedReservation();
-
       return respond({
         error: "Frame timestamps are invalid. Refresh the page and try again."
       }, 400);
     }
-
-    // Every frame receives a unique sequential label,
-    // even when two frames contain identical image data.
 
     for (const [frameIndex, image] of images.entries()) {
       if (
@@ -620,7 +521,6 @@ export default async (request) => {
         image.length > 2_000_000
       ) {
         await cancelUnstartedReservation();
-
         return respond({
           error: "A video frame was invalid or too large. Try a shorter or smaller clip."
         }, 400);
@@ -641,14 +541,11 @@ export default async (request) => {
     }
 
     // Atomically claim the reservation.
-    // Do not retry an uncertain claim because another
-    // request may already be processing the same ID.
+    // Do not retry an uncertain claim.
 
     try {
       claimedByThisRequest =
-        await updateReservation(
-          "athlescan_v2_claim"
-        );
+        await updateReservation("athlescan_v2_claim");
 
       if (!claimedByThisRequest) {
         let saved = null;
@@ -672,11 +569,7 @@ export default async (request) => {
         }, 409);
       }
     } catch (error) {
-      console.error(
-        "Reservation claim failed:",
-        error.message
-      );
-
+      console.error("Reservation claim failed:", error.message);
       return respond({
         error: "Could not confirm your analysis reservation. Check your dashboard before retrying."
       }, 502);
@@ -689,26 +582,16 @@ export default async (request) => {
 
   try {
     const primary = "gemini-3.5-flash-lite";
-
     const fallback =
       process.env.GEMINI_FALLBACK_MODEL ||
       "gemini-3-flash-preview";
 
-    const models = [
-      primary,
-      primary,
-      fallback
-    ];
-
+    const models = [primary, primary, fallback];
     const deadline = Date.now() + 25000;
 
     let upstream;
 
-    for (
-      let attempt = 0;
-      attempt < models.length;
-      attempt++
-    ) {
+    for (let attempt = 0; attempt < models.length; attempt++) {
       const model = models[attempt];
 
       if (attempt > 0) {
@@ -717,10 +600,7 @@ export default async (request) => {
         }
 
         await new Promise(resolve =>
-          setTimeout(
-            resolve,
-            attempt === 1 ? 2000 : 500
-          )
+          setTimeout(resolve, attempt === 1 ? 2000 : 500)
         );
       }
 
@@ -751,10 +631,8 @@ export default async (request) => {
                 thinkingConfig: {
                   thinkingLevel: "LOW"
                 },
-                maxOutputTokens:
-                  task === "plan" ? 1800 : 3200,
-                responseMimeType:
-                  "application/json"
+                maxOutputTokens: task === "plan" ? 1800 : 3200,
+                responseMimeType: "application/json"
               }
             })
           }
@@ -765,12 +643,7 @@ export default async (request) => {
           !response.ok &&
           upstream?.status === 503
         ) {
-          console.warn(
-            "Gemini fallback failed:",
-            model,
-            response.status
-          );
-
+          console.warn("Gemini fallback failed:", model, response.status);
           await response.body?.cancel();
           break;
         }
@@ -785,43 +658,26 @@ export default async (request) => {
           break;
         }
 
-        console.warn(
-          "Gemini overload:",
-          model,
-          "attempt",
-          attempt + 1
-        );
+        console.warn("Gemini overload:", model, "attempt", attempt + 1);
       } catch (error) {
         if (!upstream) {
           throw error;
         }
 
-        console.warn(
-          "Gemini retry failed:",
-          model,
-          error.message
-        );
-
+        console.warn("Gemini retry failed:", model, error.message);
         break;
       }
     }
 
     if (!upstream) {
-      throw new Error(
-        "Gemini request deadline exceeded"
-      );
+      throw new Error("Gemini request deadline exceeded");
     }
 
-    const result = await upstream.json()
-      .catch(() => null);
+    const result = await upstream.json().catch(() => null);
 
     if (!upstream.ok) {
       await releaseFailedAnalysis();
-
-      console.error(
-        "Gemini API error status:",
-        upstream.status
-      );
+      console.error("Gemini API error status:", upstream.status);
 
       if (upstream.status === 503) {
         return respond({
@@ -833,8 +689,6 @@ export default async (request) => {
         error: "Gemini returned an error. Please try again later or ask the site administrator to check the Netlify function logs."
       }, 502);
     }
-
-    // Ignore non-text parts and internal thought parts.
 
     const text = result
       ?.candidates?.[0]?.content?.parts
@@ -866,10 +720,7 @@ export default async (request) => {
       parsed = JSON.parse(text);
     } catch {
       await releaseFailedAnalysis();
-
-      console.error(
-        "Gemini response was not valid JSON."
-      );
+      console.error("Gemini response was not valid JSON.");
 
       return respond({
         error: "The AI response could not be read. Please try again."
@@ -883,7 +734,6 @@ export default async (request) => {
       Object.keys(parsed).length === 0
     ) {
       await releaseFailedAnalysis();
-
       return respond({
         error: "Gemini returned an incomplete analysis. Please try again."
       }, 502);
@@ -904,9 +754,7 @@ export default async (request) => {
       let total = 0;
       let weight = 0;
 
-      for (
-        const [key, w] of Object.entries(weights)
-      ) {
+      for (const [key, w] of Object.entries(weights)) {
         const value = parsed.rubric?.[key];
 
         if (
@@ -928,7 +776,6 @@ export default async (request) => {
         !parsed.summary.trim()
       ) {
         await releaseFailedAnalysis();
-
         return respond({
           error: "Incomplete technique assessment. Try a clearer clip."
         }, 502);
@@ -945,8 +792,7 @@ export default async (request) => {
         : [];
 
       const nonempty = v =>
-        typeof v === "string" &&
-        v.trim().length > 0;
+        typeof v === "string" && v.trim().length > 0;
 
       parsed.strengths = Array.isArray(parsed.strengths)
         ? parsed.strengths.filter(nonempty).slice(0, 4)
@@ -967,81 +813,141 @@ export default async (request) => {
       }
 
       const seen = new Set();
+      const rejected = {};
 
-      parsed.fixes = rawFixes
-        .filter(f =>
-          f &&
-          typeof f === "object" &&
-          !Array.isArray(f)
-        )
-        .map(f => ({
+      const reject = reason => {
+        rejected[reason] = (rejected[reason] || 0) + 1;
+      };
+
+      const lower = v =>
+        typeof v === "string" ? v.trim().toLowerCase() : "";
+
+      const numeric = v =>
+        typeof v === "number" ? v :
+        typeof v === "string" &&
+        /^\d+(?:\.\d+)?$/.test(v.trim())
+          ? Number(v.trim())
+          : NaN;
+
+      const fixes = [];
+
+      for (const raw of rawFixes) {
+        if (
+          !raw ||
+          typeof raw !== "object" ||
+          Array.isArray(raw)
+        ) {
+          reject("invalidObject");
+          continue;
+        }
+
+        const f = {
+          ...raw,
+          frame: numeric(raw.frame),
+          confidence: lower(raw.confidence),
+          visibility: lower(raw.visibility),
+          annotationConfidence: lower(raw.annotationConfidence)
+        };
+
+        if (
+          !Number.isInteger(f.frame) ||
+          f.frame < 1 ||
+          f.frame > images.length
+        ) {
+          reject("frame");
+          continue;
+        }
+
+        if (!["high", "medium"].includes(f.confidence)) {
+          reject("confidence");
+          continue;
+        }
+
+        // Accept equivalent numeric timestamp formats,
+        // but never accept a mismatched timestamp.
+
+        const t = numeric(f.timestamp);
+
+        if (
+          !Number.isFinite(t) ||
+          t !== Number(frameTimes[f.frame - 1])
+        ) {
+          reject("timestamp");
+          continue;
+        }
+
+        if (f.visibility !== "clear") {
+          reject("visibility");
+          continue;
+        }
+
+        if (![
+          f.evidence,
+          f.area,
+          f.issue,
+          f.criterion,
+          f.fix,
+          f.drill
+        ].every(nonempty)) {
+          reject("missingFields");
+          continue;
+        }
+
+        const key = f.issue.trim()
+          .toLowerCase()
+          .replace(/\s+/g, " ");
+
+        if (seen.has(key)) {
+          reject("duplicate");
+          continue;
+        }
+
+        if (fixes.length >= 5) {
+          reject("limit");
+          continue;
+        }
+
+        seen.add(key);
+
+        // Annotation confidence is independent
+        // of observation confidence.
+
+        const x = numeric(f.x);
+        const y = numeric(f.y);
+
+        const pin =
+          f.annotationConfidence === "high" &&
+          Number.isFinite(x) &&
+          Number.isFinite(y) &&
+          x >= 0 &&
+          x <= 1 &&
+          y >= 0 &&
+          y <= 1;
+
+        fixes.push({
           ...f,
-          frame:
-            typeof f.frame === "string" &&
-            /^\d+$/.test(f.frame.trim())
-              ? Number(f.frame.trim())
-              : f.frame,
-          confidence:
-            typeof f.confidence === "string"
-              ? f.confidence.trim().toLowerCase()
-              : f.confidence
-        }))
-        .filter(f =>
-          Number.isInteger(f.frame) &&
-          f.frame >= 1 &&
-          f.frame <= images.length &&
-          ["high", "medium"].includes(f.confidence) &&
-          String(f.timestamp) === frameTimes[f.frame - 1] &&
-          f.visibility === "clear" &&
-          [
-            f.evidence,
-            f.area,
-            f.issue,
-            f.criterion,
-            f.fix,
-            f.drill
-          ].every(nonempty)
-        )
-        .filter(f => {
-          const key = f.issue.trim().toLowerCase();
+          timestamp: frameTimes[f.frame - 1],
+          severity:
+            ["high", "medium", "low"].includes(lower(f.severity))
+              ? lower(f.severity)
+              : "medium",
+          x: pin ? x : null,
+          y: pin ? y : null,
+          annotationConfidence: pin ? "high" : "low"
+        });
+      }
 
-          if (seen.has(key)) {
-            return false;
-          }
-
-          seen.add(key);
-          return true;
-        })
-        .map(f => {
-          const pin =
-            f.confidence === "high" &&
-            f.annotationConfidence === "high" &&
-            Number.isFinite(f.x) &&
-            Number.isFinite(f.y) &&
-            f.x >= 0 &&
-            f.x <= 1 &&
-            f.y >= 0 &&
-            f.y <= 1;
-
-          return {
-            ...f,
-            timestamp: frameTimes[f.frame - 1],
-            severity:
-              ["high", "medium", "low"].includes(f.severity)
-                ? f.severity
-                : "medium",
-            x: pin ? f.x : null,
-            y: pin ? f.y : null,
-            annotationConfidence: pin ? "high" : "low"
-          };
-        })
-        .slice(0, 5);
+      parsed.fixes = fixes;
 
       console.info("Priority fix diagnostics:", {
         generated: rawFixes.length,
-        accepted: parsed.fixes.length,
-        discarded: rawFixes.length - parsed.fixes.length,
-        availableFrames: images.length
+        accepted: fixes.length,
+        discarded: rawFixes.length - fixes.length,
+        availableFrames: images.length,
+        annotated: fixes.filter(
+          f => f.annotationConfidence === "high"
+        ).length,
+        rejected
       });
 
       // ---------------------------------------
@@ -1056,20 +962,12 @@ export default async (request) => {
       };
 
       finalizationStarted = true;
-
       let saved = false;
-
-      // Finalization is idempotent in Supabase.
-      // Retry transport failures using the same ID.
-      // Never create a replacement reservation here.
 
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
           saved = (
-            await rpc(
-              "athlescan_v2_finalize",
-              args
-            )
+            await rpc("athlescan_v2_finalize", args)
           ) === true;
 
           break;
@@ -1082,14 +980,11 @@ export default async (request) => {
         }
       }
 
-      // Recover from a lost finalization response
-      // by checking the owner's saved history.
+      // Recover from a lost finalization response.
 
       if (!saved) {
         try {
-          const existing =
-            await loadSavedAnalysis();
-
+          const existing = await loadSavedAnalysis();
           saved = Boolean(existing);
         } catch (error) {
           console.error(
@@ -1100,9 +995,6 @@ export default async (request) => {
       }
 
       if (!saved) {
-        // Do not release an uncertain finalization.
-        // The database may have already committed.
-
         return respond({
           error: "Could not confirm analysis storage. Check your dashboard before retrying."
         }, 502);
@@ -1120,16 +1012,10 @@ export default async (request) => {
     // Practice plan response.
     // No additional analysis finalization.
 
-    return respond({
-      result: parsed
-    }, 200);
+    return respond({ result: parsed }, 200);
 
   } catch (error) {
-    console.error(
-      "Gemini request failed:",
-      error.message
-    );
-
+    console.error("Gemini request failed:", error.message);
     await releaseFailedAnalysis();
 
     return respond({
@@ -1144,14 +1030,9 @@ export default async (request) => {
 // JSON RESPONSE HELPER
 // ---------------------------------------
 
-function json(
-  data,
-  statusCode = 200,
-  cookie = null
-) {
+function json(data, statusCode = 200, cookie = null) {
   const headers = {
-    "Content-Type":
-      "application/json; charset=utf-8",
+    "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store"
   };
 
@@ -1172,10 +1053,7 @@ function json(
 // FIREBASE AUTHENTICATION
 // ---------------------------------------
 
-async function verifyFirebaseToken(
-  token,
-  projectId
-) {
+async function verifyFirebaseToken(token, projectId) {
   const pieces = token.split(".");
 
   if (pieces.length !== 3) {
@@ -1185,32 +1063,25 @@ async function verifyFirebaseToken(
   const fromBase64url = str =>
     Uint8Array.from(
       atob(
-        str
-          .replace(/-/g, "+")
-          .replace(/_/g, "/")
+        str.replace(/-/g, "+").replace(/_/g, "/")
       ),
       c => c.charCodeAt(0)
     );
 
   const decode = str =>
     JSON.parse(
-      new TextDecoder().decode(
-        fromBase64url(str)
-      )
+      new TextDecoder().decode(fromBase64url(str))
     );
 
   const header = decode(pieces[0]);
   const claims = decode(pieces[1]);
-
   const now = Math.floor(Date.now() / 1000);
 
   if (
     header.alg !== "RS256" ||
     !header.kid ||
     claims.aud !== projectId ||
-    claims.iss !==
-      "https://securetoken.google.com/" +
-      projectId ||
+    claims.iss !== "https://securetoken.google.com/" + projectId ||
     typeof claims.sub !== "string" ||
     !claims.sub ||
     claims.sub.length > 128 ||
@@ -1221,9 +1092,7 @@ async function verifyFirebaseToken(
     !Number.isFinite(claims.auth_time) ||
     claims.auth_time > now + 60
   ) {
-    throw new Error(
-      "Invalid Firebase token claims"
-    );
+    throw new Error("Invalid Firebase token claims");
   }
 
   const response = await fetch(
@@ -1234,17 +1103,13 @@ async function verifyFirebaseToken(
   );
 
   if (!response.ok) {
-    throw new Error(
-      "Could not retrieve Firebase signing keys"
-    );
+    throw new Error("Could not retrieve Firebase signing keys");
   }
 
   const { keys } = await response.json();
 
   if (!Array.isArray(keys)) {
-    throw new Error(
-      "Invalid Firebase signing keys"
-    );
+    throw new Error("Invalid Firebase signing keys");
   }
 
   const jwk = keys.find(
@@ -1254,9 +1119,7 @@ async function verifyFirebaseToken(
   );
 
   if (!jwk) {
-    throw new Error(
-      "Unknown Firebase signing key"
-    );
+    throw new Error("Unknown Firebase signing key");
   }
 
   const key = await crypto.subtle.importKey(
@@ -1280,9 +1143,7 @@ async function verifyFirebaseToken(
   );
 
   if (!valid) {
-    throw new Error(
-      "Invalid Firebase signature"
-    );
+    throw new Error("Invalid Firebase signature");
   }
 
   return {
@@ -1317,22 +1178,15 @@ async function guestHmac(value, secret) {
 
   return Array.from(
     bytes,
-    byte =>
-      byte.toString(16).padStart(2, "0")
+    byte => byte.toString(16).padStart(2, "0")
   ).join("");
 }
 
 async function signGuestCookie(id, secret) {
-  return id + "." + await guestHmac(
-    id,
-    secret
-  );
+  return id + "." + await guestHmac(id, secret);
 }
 
-async function verifyGuestCookie(
-  value,
-  secret
-) {
+async function verifyGuestCookie(value, secret) {
   const match =
     /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i
       .exec(value);
@@ -1341,11 +1195,7 @@ async function verifyGuestCookie(
     return null;
   }
 
-  const expected = await guestHmac(
-    match[1],
-    secret
-  );
-
+  const expected = await guestHmac(match[1], secret);
   let difference = 0;
 
   for (let i = 0; i < 64; i++) {
@@ -1354,7 +1204,5 @@ async function verifyGuestCookie(
       match[2].charCodeAt(i);
   }
 
-  return difference === 0
-    ? match[1]
-    : null;
+  return difference === 0 ? match[1] : null;
 }
