@@ -391,12 +391,12 @@ export default async (request) => {
     if (
       !Array.isArray(images) ||
       images.length < 1 ||
-      images.length > 6
+      images.length > 12
     ) {
       await releaseFailedAnalysis();
 
       return respond({
-        error: "Each analysis request must contain 1–6 frames."
+        error: "Each analysis request must contain 1–12 frames."
       }, 400);
     }
 
