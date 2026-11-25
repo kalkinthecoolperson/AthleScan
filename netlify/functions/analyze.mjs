@@ -251,117 +251,25 @@ export default async (request) => {
     return;
   }
 
+  async function rpc(name, args) {
+    const response = await fetch(supabaseUrl + "/rest/v1/rpc/" + name, {
+      method: "POST",
+      headers: serviceHeaders,
+      body: JSON.stringify(args),
+      signal: AbortSignal.timeout(5000)
+    });
+
+    if (!response.ok) {
+      throw Error(name + " failed: " + response.status);
+    }
+
+    return await response.json();
+  }
+
   if (task === "finalize") {
-    if (
-      !validReservationId(reservationId) ||
-      !result ||
-      typeof result !== "object" ||
-      Array.isArray(result) ||
-      !Number.isFinite(result.score) ||
-      result.score < 0 ||
-      result.score > 100 ||
-      typeof sport !== "string" ||
-      !sport.trim() ||
-      JSON.stringify(result).length > 25000
-    ) {
-      return respond({
-        error: "Invalid completed analysis."
-      }, 400);
-    }
-
-    try {
-      const completed = await updateReservation("athlescan_v2_consume");
-
-      if (!completed) {
-        // An already-consumed reservation may indicate a retried finalize
-        // request. Check for an existing history record before rejecting it.
-        const existingUrl =
-          supabaseUrl + "/rest/v1/athlescan_analysis_history?" +
-          new URLSearchParams({
-            user_id: "eq." + userId,
-            reservation_id: "eq." + reservationId,
-            select: "id",
-            limit: "1"
-          });
-
-        const existingResponse = await fetch(existingUrl, {
-          headers: serviceHeaders
-        });
-
-        if (existingResponse.ok) {
-          const existingRows = await existingResponse.json();
-
-          if (Array.isArray(existingRows) && existingRows.length > 0) {
-            return respond({
-              completed: true,
-              historySaved: true,
-              alreadyFinalized: true
-            });
-          }
-        }
-
-        return respond({
-          error: "This analysis reservation is expired or already used. Start a new analysis."
-        }, 403);
-      }
-
-      // The analysis is already completed. A history storage problem must not undo it.
-      let historySaved = false;
-
-      try {
-        const entry = {
-          user_id: userId,
-          reservation_id: reservationId,
-          sport: sport.slice(0, 100),
-          action: String(result.action || "").slice(0, 200),
-          score: Math.round(result.score),
-          summary: String(result.summary || "").slice(0, 2500),
-          strengths: Array.isArray(result.strengths)
-            ? result.strengths.slice(0, 8)
-            : [],
-          fixes: Array.isArray(result.fixes)
-            ? result.fixes.slice(0, 8)
-            : []
-        };
-
-        const saved = await fetch(
-          supabaseUrl + "/rest/v1/athlescan_analysis_history",
-          {
-            method: "POST",
-            headers: {
-              ...serviceHeaders,
-              Prefer: "return=minimal"
-            },
-            body: JSON.stringify(entry)
-          }
-        );
-
-        if (!saved.ok) {
-          throw Error(
-            "History insert failed: " +
-            saved.status + " " +
-            (await saved.text()).slice(0, 300)
-          );
-        }
-
-        historySaved = true;
-
-      } catch (error) {
-        console.error("Completed analysis history not saved:", error);
-      }
-
-      return respond({
-        completed: true,
-        historySaved
-      });
-
-    } catch (error) {
-      console.error("Could not finalize analysis:", error);
-
-      return respond({
-        error: "Could not finalize your analysis. Please try again."
-      }, 502);
-    }
+    return respond({
+      error: "Please refresh to use the updated analysis workflow."
+    }, 409);
   }
 
   if (task === "cancel") {
@@ -423,12 +331,12 @@ export default async (request) => {
     if (
       !Array.isArray(images) ||
       images.length < 1 ||
-      images.length > 3
+      images.length > 6
     ) {
       await releaseFailedAnalysis();
 
       return respond({
-        error: "Each analysis request must contain 1–3 frames."
+        error: "Each analysis request must contain 1–6 frames."
       }, 400);
     }
 
@@ -453,6 +361,28 @@ export default async (request) => {
           data
         }
       });
+    }
+  }
+
+  if (task === "analyze") {
+    if (typeof sport !== "string" || !sport.trim()) {
+      return respond({
+        error: "Select a sport."
+      }, 400);
+    }
+
+    try {
+      if (await updateReservation("athlescan_v2_claim") !== true) {
+        return respond({
+          error: "Analysis already started or expired. Refresh and try again."
+        }, 409);
+      }
+    } catch (e) {
+      console.error(e);
+
+      return respond({
+        error: "Could not verify analysis reservation."
+      }, 502);
     }
   }
 
@@ -631,8 +561,85 @@ export default async (request) => {
       }, 502);
     }
 
-    // Do not consume the reservation here: one video uses two Gemini calls.
-    // The frontend finalizes only after both halves return successfully.
+    if (task === "analyze") {
+      const weights = {
+        setup: 20,
+        execution: 40,
+        control: 25,
+        finish: 15
+      };
+
+      let total = 0;
+      let weight = 0;
+
+      for (const [key, w] of Object.entries(weights)) {
+        const v = parsed.rubric?.[key];
+
+        if (
+          typeof v === "number" &&
+          Number.isFinite(v) &&
+          v >= 0 &&
+          v <= 100
+        ) {
+          total += v * w;
+          weight += w;
+        }
+      }
+
+      if (
+        !weight ||
+        typeof parsed.action !== "string" ||
+        typeof parsed.summary !== "string"
+      ) {
+        return respond({
+          error: "Incomplete technique assessment. Try a clearer clip."
+        }, 502);
+      }
+
+      parsed.score = Math.round(total / weight);
+
+      parsed.fixes = (
+        Array.isArray(parsed.fixes)
+          ? parsed.fixes
+          : []
+      ).filter(f =>
+        f &&
+        Number.isInteger(f.frame) &&
+        f.frame >= 1 &&
+        f.frame <= images.length &&
+        f.confidence !== "low"
+      ).slice(0, 5);
+
+      const args = {
+        p_reservation_id: reservationId,
+        p_user_id: userId,
+        p_sport: sport,
+        p_result: parsed
+      };
+
+      let saved = false;
+
+      for (let i = 0; i < 2; i++) {
+        try {
+          saved = await rpc("athlescan_v2_finalize", args);
+          break;
+        } catch (e) {
+          console.error("Finalize attempt", e.message);
+        }
+      }
+
+      if (saved !== true) {
+        return respond({
+          error: "Could not confirm analysis storage. Check your dashboard before retrying."
+        }, 502);
+      }
+
+      return respond({
+        result: parsed,
+        completed: true,
+        historySaved: true
+      });
+    }
 
     return respond({
       result: parsed
