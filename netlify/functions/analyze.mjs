@@ -224,9 +224,7 @@ export default async (request) => {
     return Array.isArray(rows) ? rows[0] || null : null;
   }
 
-  // ---------------------------------------
   // DASHBOARD HISTORY
-  // ---------------------------------------
 
   if (task === "history") {
     try {
@@ -262,9 +260,7 @@ export default async (request) => {
     }
   }
 
-  // ---------------------------------------
   // DELETE SAVED ANALYSIS
-  // ---------------------------------------
 
   if (
     task === "delete" ||
@@ -306,9 +302,7 @@ export default async (request) => {
     }
   }
 
-  // ---------------------------------------
   // USAGE STATUS AND RESERVATION
-  // ---------------------------------------
 
   if (task === "status" || task === "reserve") {
     try {
@@ -367,9 +361,7 @@ export default async (request) => {
     }
   }
 
-  // ---------------------------------------
   // FEEDBACK
-  // ---------------------------------------
 
   if (task === "feedback") {
     if (
@@ -430,9 +422,7 @@ export default async (request) => {
     }
   }
 
-  // ---------------------------------------
   // LEGACY FINALIZATION PROTECTION
-  // ---------------------------------------
 
   if (task === "finalize") {
     return respond({
@@ -440,9 +430,7 @@ export default async (request) => {
     }, 409);
   }
 
-  // ---------------------------------------
   // SAFE CLIENT CANCELLATION
-  // ---------------------------------------
 
   if (task === "cancel") {
     if (!validReservationId(reservationId)) {
@@ -470,9 +458,7 @@ export default async (request) => {
     }
   }
 
-  // ---------------------------------------
   // ANALYSIS REQUEST VALIDATION
-  // ---------------------------------------
 
   if (
     task === "analyze" &&
@@ -501,16 +487,34 @@ export default async (request) => {
     }, 500);
   }
 
-  // ---------------------------------------
   // SYSTEMATIC TECHNIQUE ASSESSMENT
-  // EVIDENCE-FIRST PRIORITY FIX GENERATION
+  // CHECKPOINT AUDIT
   // ADAPTIVE ANNOTATION CONFIDENCE
-  // ---------------------------------------
 
   const parts = [{
     text: prompt.slice(0, 18000) + (
       task === "analyze"
-        ? "\nAudit every applicable criterion before ranking all distinct visible issues. Return zero to five supported fixes, not a quota. Keep each field concise. Follow the exact response schema and frame timestamps. Never infer hidden anatomy or fabricate evidence. Annotation confidence is independent of observation confidence; use null coordinates if location is unreliable."
+        ? "\n\nMANDATORY ASSESSMENT:\n" +
+          "Complete checkpointAudit before selecting fixes. " +
+          "Independently evaluate every applicable observable sport-specific criterion. " +
+          "Classify each criterion as issue, strength, acceptable, or unassessable, with concise evidence. " +
+          "Inspect all supplied frames and relevant movement phases. " +
+          "Do not stop after identifying the first issue. " +
+          "Collect all distinct supported actionable issues, then rank them by importance. " +
+          "Return zero to five priority fixes, with no mandatory minimum. " +
+          "Include multiple fixes whenever multiple distinct actionable issues are supported. " +
+          "Never invent errors or duplicate the same underlying issue. " +
+          "Keep all fields concise and follow the structured response schema. " +
+          "Every fix must cite the exact frame and timestamp with specific visible evidence. " +
+          "Do not infer obscured anatomy or equipment. " +
+          "For every supported fix, independently attempt to locate its relevant visible region. " +
+          "Use high annotationConfidence with normalized coordinates for precise locations. " +
+          "Use medium annotationConfidence with approximate center coordinates when the broader region is identifiable but the exact point is uncertain. " +
+          "Use low annotationConfidence and null coordinates only when no reliable region can be located. " +
+          "Annotation confidence is independent of observation confidence. " +
+          "Do not default to null coordinates when the relevant region is visible. " +
+          "Never fabricate coordinates. " +
+          "Preserve all required scoring, strengths, phases, summary and action fields."
         : ""
     )
   }];
@@ -621,11 +625,9 @@ export default async (request) => {
     }
   }
 
-  // ---------------------------------------
   // GEMINI ANALYSIS
   // STRUCTURED JSON OUTPUT
   // BOUNDED INVALID-RESPONSE RECOVERY
-  // ---------------------------------------
 
   try {
     const primary = "gemini-3.5-flash-lite";
@@ -782,9 +784,7 @@ export default async (request) => {
       }, status === 503 ? 503 : 502);
     }
 
-    // ---------------------------------------
     // STANDARDIZED WEIGHTED SCORING
-    // ---------------------------------------
 
     if (task === "analyze") {
       const weights = {
@@ -827,9 +827,29 @@ export default async (request) => {
 
       parsed.score = Math.round(total / weight);
 
-      // ---------------------------------------
+      // CHECKPOINT AUDIT DIAGNOSTICS
+
+      const audit = Array.isArray(parsed.checkpointAudit)
+        ? parsed.checkpointAudit
+        : [];
+
+      console.info("Technique checkpoint audit", {
+        total: audit.length,
+        issues: audit.filter(
+          v => v?.assessment === "issue"
+        ).length,
+        strengths: audit.filter(
+          v => v?.assessment === "strength"
+        ).length,
+        acceptable: audit.filter(
+          v => v?.assessment === "acceptable"
+        ).length,
+        unassessable: audit.filter(
+          v => v?.assessment === "unassessable"
+        ).length
+      });
+
       // PRIORITY FIX NORMALIZATION
-      // ---------------------------------------
 
       const rawFixes = Array.isArray(parsed.fixes)
         ? parsed.fixes
@@ -955,15 +975,10 @@ export default async (request) => {
 
         seen.add(key);
 
-        // ---------------------------------------
         // ADAPTIVE ANNOTATION VALIDATION
-        // ---------------------------------------
         // High confidence: precise circle.
         // Medium confidence: larger approximate circle.
         // Low confidence: no circle.
-        //
-        // Annotation confidence is independent
-        // of observation confidence.
 
         const x = numeric(f.x);
         const y = numeric(f.y);
@@ -992,6 +1007,12 @@ export default async (request) => {
         });
       }
 
+      console.info("Annotation diagnostics", rawFixes.map(f => ({
+        confidence: f?.annotationConfidence,
+        hasCoordinates: f?.x != null && f?.y != null
+      })));
+
+      delete parsed.checkpointAudit;
       parsed.fixes = fixes;
 
       console.info("Priority fix diagnostics:", {
@@ -1008,9 +1029,7 @@ export default async (request) => {
         rejected
       });
 
-      // ---------------------------------------
       // ATOMIC FINALIZATION
-      // ---------------------------------------
 
       const args = {
         p_reservation_id: reservationId,
@@ -1090,9 +1109,7 @@ export default async (request) => {
   }
 };
 
-// ---------------------------------------
 // JSON RESPONSE HELPER
-// ---------------------------------------
 
 function json(data, statusCode = 200, cookie = null) {
   const headers = {
@@ -1113,9 +1130,7 @@ function json(data, statusCode = 200, cookie = null) {
   );
 }
 
-// ---------------------------------------
 // FIREBASE AUTHENTICATION
-// ---------------------------------------
 
 async function verifyFirebaseToken(token, projectId) {
   const pieces = token.split(".");
@@ -1218,9 +1233,7 @@ async function verifyFirebaseToken(token, projectId) {
   };
 }
 
-// ---------------------------------------
 // SIGNED GUEST COOKIES
-// ---------------------------------------
 
 async function guestHmac(value, secret) {
   const key = await crypto.subtle.importKey(
@@ -1273,9 +1286,7 @@ async function verifyGuestCookie(value, secret) {
   return difference === 0 ? match[1] : null;
 }
 
-// ---------------------------------------
 // STRUCTURED GEMINI RESPONSE SCHEMAS
-// ---------------------------------------
 
 function responseSchema(task) {
   const str = {
@@ -1345,6 +1356,23 @@ function responseSchema(task) {
       control: num,
       finish: num
     }),
+
+    checkpointAudit: arr(
+      obj({
+        criterion: str,
+        assessment: {
+          type: "STRING",
+          enum: [
+            "issue",
+            "strength",
+            "acceptable",
+            "unassessable"
+          ]
+        },
+        evidence: str
+      }),
+      12
+    ),
 
     strengths: arr(str, 4),
 
