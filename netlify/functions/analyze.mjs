@@ -15,6 +15,7 @@ export default async (request) => {
     task,
     prompt,
     images,
+    frameTimes,
     reservationId,
     rating,
     sport
@@ -553,13 +554,13 @@ export default async (request) => {
       task === "analyze"
         ? "\n\nPRIORITY FIX REQUIREMENTS:\n" +
           "- Examine all supplied frames before selecting fixes.\n" +
-          "- Aim for 3–5 distinct priority fixes when supported by visual evidence.\n" +
+          "- Return zero to five distinct fixes, with no minimum. Evidence must be directly visible. Include evidence, visibility (clear or uncertain), exact timestamp from the frame label, and annotationConfidence (high or low). Never infer hidden body parts. Use null coordinates when uncertain.\n" +
           "- Examine setup, execution, control, and finish.\n" +
           "- Use an integer frame number between 1 and " +
           (Array.isArray(images) ? images.length : 0) + ".\n" +
           "- Use lowercase confidence values: high, medium, or low.\n" +
           "- Do not repeat the same correction in different words.\n" +
-          "- Return fewer fixes only when the evidence genuinely supports fewer.\n" +
+          "- No correction quota. Omit unsupported findings, including those based on submerged or obscured anatomy.\n" +
           "- Never invent technique problems."
         : ""
     )
@@ -589,6 +590,26 @@ export default async (request) => {
       }, 400);
     }
 
+    if (
+      !Array.isArray(frameTimes) ||
+      frameTimes.length !== images.length ||
+      !frameTimes.every((t, i) =>
+        typeof t === "string" &&
+        /^\d+\.\d{2}$/.test(t) &&
+        Number.isFinite(Number(t)) &&
+        (
+          i === 0 ||
+          Number(t) >= Number(frameTimes[i - 1])
+        )
+      )
+    ) {
+      await cancelUnstartedReservation();
+
+      return respond({
+        error: "Frame timestamps are invalid. Refresh the page and try again."
+      }, 400);
+    }
+
     // Every frame receives a unique sequential label,
     // even when two frames contain identical image data.
 
@@ -607,7 +628,8 @@ export default async (request) => {
 
       parts.push({
         text: "Frame " + (frameIndex + 1) +
-          " of " + images.length
+          " of " + images.length +
+          " at " + frameTimes[frameIndex] + " seconds"
       });
 
       parts.push({
@@ -922,6 +944,30 @@ export default async (request) => {
         ? parsed.fixes
         : [];
 
+      const nonempty = v =>
+        typeof v === "string" &&
+        v.trim().length > 0;
+
+      parsed.strengths = Array.isArray(parsed.strengths)
+        ? parsed.strengths.filter(nonempty).slice(0, 4)
+        : [];
+
+      parsed.phases = Array.isArray(parsed.phases)
+        ? parsed.phases.filter(v =>
+            v &&
+            Number.isInteger(v.frame) &&
+            v.frame >= 1 &&
+            v.frame <= images.length &&
+            nonempty(v.observation)
+          ).slice(0, 6)
+        : [];
+
+      if (typeof parsed.instrument !== "string") {
+        parsed.instrument = "unknown";
+      }
+
+      const seen = new Set();
+
       parsed.fixes = rawFixes
         .filter(f =>
           f &&
@@ -944,8 +990,51 @@ export default async (request) => {
           Number.isInteger(f.frame) &&
           f.frame >= 1 &&
           f.frame <= images.length &&
-          ["high", "medium"].includes(f.confidence)
+          ["high", "medium"].includes(f.confidence) &&
+          String(f.timestamp) === frameTimes[f.frame - 1] &&
+          f.visibility === "clear" &&
+          [
+            f.evidence,
+            f.area,
+            f.issue,
+            f.criterion,
+            f.fix,
+            f.drill
+          ].every(nonempty)
         )
+        .filter(f => {
+          const key = f.issue.trim().toLowerCase();
+
+          if (seen.has(key)) {
+            return false;
+          }
+
+          seen.add(key);
+          return true;
+        })
+        .map(f => {
+          const pin =
+            f.confidence === "high" &&
+            f.annotationConfidence === "high" &&
+            Number.isFinite(f.x) &&
+            Number.isFinite(f.y) &&
+            f.x >= 0 &&
+            f.x <= 1 &&
+            f.y >= 0 &&
+            f.y <= 1;
+
+          return {
+            ...f,
+            timestamp: frameTimes[f.frame - 1],
+            severity:
+              ["high", "medium", "low"].includes(f.severity)
+                ? f.severity
+                : "medium",
+            x: pin ? f.x : null,
+            y: pin ? f.y : null,
+            annotationConfidence: pin ? "high" : "low"
+          };
+        })
         .slice(0, 5);
 
       console.info("Priority fix diagnostics:", {
