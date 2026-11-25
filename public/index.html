@@ -510,11 +510,11 @@ function mk(fr,part,prior){
   criteriaFor(sport,$("focus").value)+"\nOptional estimated 2D joint angles (not 3D, null means unavailable): "+JSON.stringify(fr.map(f=>f.pose||null))+"\nRate visible technique only: setup, execution, control, finish each 0–100 or null if not visible. Return rubric with these four keys. Do not judge appearance or body shape."+"\nAthlete notes: "+($("notes").value||"none")+
   (prior?"\nPrior observations (avoid duplicate findings): "+prior:"")+
   "\nFirst identify the actual visible action. Analyze the visible progression across frames, assigning each frame a movement phase such as setup, execution, or follow-through. Only infer motion between frames when supported; do not claim continuous video observation. Compare the exact action against sport-specific established technique principles, not an imaginary professional video. "+
-  "Each finding must cite one of the supplied frame indices AND its exact provided timestamp, copied from the frame list. If you cannot substantiate a finding in a frame, omit it. If camera angle or occlusion prevents a reliable judgment, say so. Avoid fabricated numerical measurements. "+
+  "Each finding must cite one of the supplied frame indices AND its exact provided timestamp, copied from the frame list. If you cannot substantiate a finding in a frame, omit it. If camera angle or occlusion prevents a reliable judgment, say so. Avoid fabricated numerical measurements. For each fix, provide evidence describing the visible observation in that exact frame, visibility clear or uncertain, and timestamp copied from the frame label. Omit fixes involving obscured or invisible anatomy. "+
   "Include 1-3 real strengths and up to 3 distinct actionable fixes with specific coaching cues, optional drills, and the relevant sport-specific criterion. "+
   "If the skill or athlete cannot be evaluated, set score 0, fixes [], and explain why. Score is an approximate qualitative estimate, not an instrument measurement. "+
   "Reply ONLY with valid JSON: "+
-  JSON.stringify({instrument:"visible instrument or unknown",action:"identified action",summary:"two concise sentences",score:75,rubric:{setup:75,execution:75,control:75,finish:75},strengths:["visible strength"],phases:[{frame:1,phase:"setup",observation:"what is visible",confidence:"high"}],fixes:[{frame:1,x:0.5,y:0.5,area:"body part / phase",issue:"specific visible issue",criterion:"sport-specific technique criterion",fix:"one practical cue",drill:"simple safe drill",severity:"medium",confidence:"high"}]})+
+  JSON.stringify({instrument:"visible instrument or unknown",action:"identified action",summary:"two concise sentences",score:75,rubric:{setup:75,execution:75,control:75,finish:75},strengths:["visible strength"],phases:[{frame:1,phase:"setup",observation:"what is visible",confidence:"high"}],fixes:[{frame:1,timestamp:fr[0].t.toFixed(2),evidence:"specific visible observation",visibility:"clear",x:0.5,y:0.5,area:"body part / phase",issue:"specific visible issue",criterion:"sport-specific technique criterion",fix:"one practical cue",drill:"simple safe drill",severity:"medium",confidence:"high"}]})+
   "\nUse frame indices from 1 to "+fr.length+". Confidence must be high, medium, or low; do not report low-confidence fixes as facts.";
 }
 function merge(a,b,per){
@@ -536,7 +536,7 @@ try{
 var per=3;var fr=await frames(per*2);
 $("msg").textContent="Checking your analysis limit…";var reserved=await apiTask({task:"reserve"});reservationId=reserved.reservationId;quotaRemaining=reserved.remaining;upd();
 $("msg").textContent="Analyzing your clip…";$("pb").style.width="45%";
-var data=await apiTask({task:"analyze",reservationId:reservationId,sport:sport,prompt:mk(fr,"full",""),images:fr.map(f=>f.url)});
+var data=await apiTask({task:"analyze",reservationId:reservationId,sport:sport,prompt:mk(fr,"full",""),images:fr.map(f=>f.url),frameTimes:fr.map(f=>f.t.toFixed(2))});
 var r=data.result;
 if(!data.completed)throw Error("Analysis was not saved.");
 var finalized=data;
@@ -583,6 +583,7 @@ if(Array.isArray(r.phases)&&r.phases.length){var phases=el("div","card");phases.
 if((r.strengths||[]).length){var g=el("div","card");g.appendChild(el("h2",null,"What you’re doing well"));var u=el("ul");r.strengths.forEach(function(t){u.appendChild(el("li",null,t))});g.appendChild(u);o.appendChild(g)}
 var f=el("div","card");f.appendChild(el("h2",null,"Fix these first"));
 (r.fixes||[]).forEach(function(x,i){var d=el("div","fix "+(x.severity||"medium"));d.appendChild(el("div","tag",(i+1)+" · "+(x.severity||"medium")+" priority · "+(x.area||"")));d.appendChild(el("h3",null,x.issue||""));
+if(x.evidence)d.appendChild(el("p","ref","Visible evidence: "+x.evidence));
 if(x.criterion)d.appendChild(el("p","ref","Technique checkpoint: "+x.criterion));
 if(x.confidence)d.appendChild(el("div","tag","Observation confidence: "+x.confidence));
 var fm=fr[Math.max(0,Math.min(fr.length-1,(x.frame||1)-1))];d.appendChild(el("div","tag","Video timestamp: "+fm.t.toFixed(2)+"s · sampled frame "+x.frame));
