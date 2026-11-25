@@ -1,3 +1,4 @@
+
 export default async (request) => {
   if (request.method !== "POST") {
     return json({ error: "Use POST for this endpoint." }, 405);
@@ -10,11 +11,7 @@ export default async (request) => {
     return json({ error: "The request was not valid JSON." }, 400);
   }
 
-  const {
-    task, prompt, images, frameTimes,
-    reservationId, rating, sport
-  } = body || {};
-
+  const { task, prompt, images, reservationId, rating, sport, result } = body || {};
   const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const firebaseProject = "athlescan-auth";
@@ -23,35 +20,14 @@ export default async (request) => {
     return json({ error: "Supabase is not configured in Netlify." }, 500);
   }
 
-  const allowedTasks = [
-    "status", "reserve", "analyze", "plan", "feedback",
-    "cancel", "finalize", "history", "delete",
-    "deleteAnalysis", "delete_analysis"
-  ];
-
-  if (!allowedTasks.includes(task)) {
+  if (!["status", "reserve", "analyze", "plan", "feedback", "cancel", "finalize", "history"].includes(task)) {
     return json({ error: "Unknown task." }, 400);
   }
 
-  const origin = request.headers.get("origin");
-
-  try {
-    if (origin && new URL(origin).origin !== new URL(request.url).origin) {
-      return json({ error: "Invalid request origin." }, 403);
-    }
-  } catch {
-    return json({ error: "Invalid request origin." }, 403);
-  }
-
   const bearer = request.headers.get("authorization") || "";
-  let userId;
-  let guestCookie = null;
+  let userId, guestCookie = null;
 
-  if (bearer) {
-    if (!/^Bearer \S+$/i.test(bearer)) {
-      return json({ error: "Invalid authentication." }, 401);
-    }
-
+  if (/^Bearer \S+$/i.test(bearer)) {
     try {
       const user = await verifyFirebaseToken(
         bearer.replace(/^Bearer /i, ""),
@@ -61,41 +37,36 @@ export default async (request) => {
       userId = "firebase:" + user.uid;
     } catch (e) {
       console.error("Firebase authentication failed:", e.message);
-
       return json({
         error: "Your Google sign-in is invalid or expired. Please sign in again."
       }, 401);
     }
   } else {
-    const cookies = request.headers.get("cookie") || "";
-    const match = cookies.match(/(?:^|;\s*)athlescan_guest=([^;]+)/);
-    let existing = null;
-
-    if (match) {
-      try {
-        existing = await verifyGuestCookie(
-          decodeURIComponent(match[1]), serviceKey
-        );
-      } catch {
-        existing = null;
-      }
+    const origin = request.headers.get("origin");
+    if (origin && new URL(origin).origin !== new URL(request.url).origin) {
+      return json({ error: "Invalid request origin." }, 403);
     }
+
+    const secret = serviceKey;
+    const cookies = request.headers.get("cookie") || "";
+
+    const match = cookies.match(/(?:^|;\s*)athlescan_guest=([^;]+)/);
+    const existing = match
+      ? await verifyGuestCookie(decodeURIComponent(match[1]), secret)
+      : null;
 
     const guestId = existing || crypto.randomUUID();
     userId = "guest:" + guestId;
 
     if (!existing) {
-      const value = await signGuestCookie(guestId, serviceKey);
-
+      const value = await signGuestCookie(guestId, secret);
       guestCookie =
-        "athlescan_guest=" +
-        encodeURIComponent(value) +
+        "athlescan_guest=" + encodeURIComponent(value) +
         "; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax";
     }
   }
 
-  const respond = (data, code = 200) =>
-    json(data, code, guestCookie);
+  const respond = (data, code = 200) => json(data, code, guestCookie);
 
   const serviceHeaders = {
     apikey: serviceKey,
@@ -103,220 +74,62 @@ export default async (request) => {
     "Content-Type": "application/json"
   };
 
-  const validReservationId = value =>
+  const validReservationId = (value) =>
     typeof value === "string" &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
-  const reservationArgs = {
-    p_reservation_id: reservationId,
-    p_user_id: userId
-  };
-
-  let claimedByThisRequest = false;
-  let finalizationStarted = false;
-
-  async function rpc(name, args, timeout = 5000) {
-    const response = await fetch(
-      supabaseUrl + "/rest/v1/rpc/" + name,
-      {
-        method: "POST",
-        headers: serviceHeaders,
-        body: JSON.stringify(args),
-        signal: AbortSignal.timeout(timeout)
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(name + " failed: " + response.status);
-    }
-
-    return await response.json();
-  }
-
-  async function updateReservation(name) {
-    if (!validReservationId(reservationId)) {
-      return false;
-    }
-
-    return (await rpc(name, reservationArgs)) === true;
-  }
-
-  async function cancelUnstartedReservation() {
-    if (
-      task !== "analyze" ||
-      !validReservationId(reservationId)
-    ) {
-      return false;
-    }
-
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        return await updateReservation("athlescan_v2_cancel");
-      } catch (error) {
-        console.error(
-          "Reservation cancellation failed:",
-          error.message
-        );
-      }
-    }
-
-    return false;
-  }
-
-  async function releaseFailedAnalysis() {
-    if (
-      task !== "analyze" ||
-      !claimedByThisRequest ||
-      finalizationStarted ||
-      !validReservationId(reservationId)
-    ) {
-      return false;
-    }
-
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const released = await updateReservation(
-          "athlescan_v2_fail"
-        );
-
-        if (released) {
-          claimedByThisRequest = false;
-        }
-
-        return released;
-      } catch (error) {
-        console.error(
-          "Reservation recovery failed:",
-          error.message
-        );
-      }
-    }
-
-    return false;
-  }
-
-  async function loadSavedAnalysis() {
-    if (!validReservationId(reservationId)) {
-      return null;
-    }
-
-    const query = new URLSearchParams({
-      user_id: "eq." + userId,
-      reservation_id: "eq." + reservationId,
-      select: "id,reservation_id,sport,action,score,summary,strengths,fixes,created_at",
-      limit: "1"
-    });
-
-    const response = await fetch(
-      supabaseUrl + "/rest/v1/athlescan_analysis_history?" + query,
-      {
-        headers: serviceHeaders,
-        signal: AbortSignal.timeout(5000)
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error("History recovery failed");
-    }
-
-    const rows = await response.json();
-
-    return Array.isArray(rows) ? rows[0] || null : null;
-  }
-
-  // DASHBOARD HISTORY
-
+  // Dashboard history is stored per authenticated account or signed guest cookie.
   if (task === "history") {
     try {
-      const query = new URLSearchParams({
-        user_id: "eq." + userId,
-        select: "id,reservation_id,sport,action,score,summary,strengths,fixes,created_at",
-        order: "created_at.desc",
-        limit: "100"
-      });
+      const url = supabaseUrl + "/rest/v1/athlescan_analysis_history?" +
+        new URLSearchParams({
+          user_id: "eq." + userId,
+          select: "id,reservation_id,sport,action,score,summary,strengths,fixes,created_at",
+          order: "created_at.desc",
+          limit: "100"
+        });
 
-      const response = await fetch(
-        supabaseUrl + "/rest/v1/athlescan_analysis_history?" + query,
-        {
-          headers: serviceHeaders,
-          signal: AbortSignal.timeout(5000)
-        }
-      );
+      const r = await fetch(url, { headers: serviceHeaders });
 
-      if (!response.ok) {
-        throw new Error("History query failed: " + response.status);
+      if (!r.ok) {
+        throw Error(
+          "History query failed: " +
+          r.status + " " +
+          (await r.text()).slice(0, 300)
+        );
       }
 
-      return respond({
-        analyses: await response.json()
-      });
+      return respond({ analyses: await r.json() });
 
     } catch (error) {
       console.error(error);
-
       return respond({
-        error: "Could not load analysis history. Please try again."
+        error: "Could not load analysis history. Make sure the dashboard SQL has been installed."
       }, 502);
     }
   }
-
-  // DELETE SAVED ANALYSIS
-
-  if (
-    task === "delete" ||
-    task === "deleteAnalysis" ||
-    task === "delete_analysis"
-  ) {
-    if (!validReservationId(reservationId)) {
-      return respond({
-        error: "Invalid analysis reference."
-      }, 400);
-    }
-
-    try {
-      const deleted = await rpc(
-        "athlescan_delete_analysis",
-        reservationArgs
-      );
-
-      if (deleted !== true) {
-        return respond({
-          error: "This analysis was not found or has already been deleted."
-        }, 404);
-      }
-
-      return respond({
-        deleted: true,
-        success: true
-      });
-
-    } catch (error) {
-      console.error(
-        "Analysis deletion failed:",
-        error.message
-      );
-
-      return respond({
-        error: "Could not confirm deletion. Refresh your dashboard before trying again."
-      }, 502);
-    }
-  }
-
-  // USAGE STATUS AND RESERVATION
 
   if (task === "status" || task === "reserve") {
     try {
-      const name = task === "status"
+      const rpc = task === "status"
         ? "athlescan_v2_status"
         : "athlescan_v2_reserve";
 
-      const data = await rpc(name, {
-        p_user_id: userId
+      const r = await fetch(supabaseUrl + "/rest/v1/rpc/" + rpc, {
+        method: "POST",
+        headers: serviceHeaders,
+        body: JSON.stringify({ p_user_id: userId })
       });
 
-      if (!data || typeof data !== "object") {
-        throw new Error("Invalid usage response");
+      if (!r.ok) {
+        throw Error(
+          "Usage RPC failed: " +
+          r.status + " " +
+          (await r.text()).slice(0, 300)
+        );
       }
+
+      const data = await r.json();
 
       if (task === "status") {
         return respond({
@@ -326,23 +139,16 @@ export default async (request) => {
       }
 
       if (!data.allowed) {
-        const retryDate = new Date(data.retry_at);
-
-        const retryMessage =
-          data.retry_at && Number.isFinite(retryDate.getTime())
-            ? "User limit reached. Try again at " +
-              retryDate.toLocaleString() + "."
-            : "User limit reached. Please try again later.";
-
         return respond({
-          error: retryMessage,
+          error: "User limit reached. Try again at " +
+            new Date(data.retry_at).toLocaleString() + ".",
           retryAt: data.retry_at,
           remaining: 0
         }, 429);
       }
 
-      if (!validReservationId(data.reservation_id)) {
-        throw new Error("Reservation ID missing or invalid");
+      if (typeof data.reservation_id !== "string") {
+        throw Error("Reservation ID missing from RPC");
       }
 
       return respond({
@@ -350,18 +156,15 @@ export default async (request) => {
         remaining: data.remaining
       });
 
-    } catch (error) {
-      console.error(error);
-
+    } catch (e) {
+      console.error(e);
       return respond({
-        error: task === "status"
-          ? "Could not check your analysis limit. Please try again."
-          : "Could not confirm your reservation. Refresh your usage status before trying again."
+        error: "Could not " +
+          (task === "status" ? "check" : "reserve") +
+          " your analysis limit. Please try again."
       }, 502);
     }
   }
-
-  // FEEDBACK
 
   if (task === "feedback") {
     if (
@@ -376,12 +179,11 @@ export default async (request) => {
     }
 
     try {
-      const response = await fetch(
+      const r = await fetch(
         supabaseUrl + "/rest/v1/rpc/athlescan_submit_feedback",
         {
           method: "POST",
           headers: serviceHeaders,
-          signal: AbortSignal.timeout(5000),
           body: JSON.stringify({
             p_user_id: userId,
             p_reservation_id: reservationId,
@@ -393,19 +195,21 @@ export default async (request) => {
         }
       );
 
-      if (!response.ok) {
-        if (response.status === 409) {
+      if (!r.ok) {
+        if (r.status === 409) {
           return respond({
             error: "Feedback has already been submitted for this analysis."
           }, 409);
         }
 
-        throw new Error(
-          "Feedback RPC failed: " + response.status
+        throw Error(
+          "Feedback RPC failed: " +
+          r.status + " " +
+          (await r.text()).slice(0, 300)
         );
       }
 
-      if (await response.json() !== true) {
+      if (await r.json() !== true) {
         return respond({
           error: "Feedback could not be accepted for this analysis."
         }, 403);
@@ -413,24 +217,61 @@ export default async (request) => {
 
       return respond({ saved: true });
 
-    } catch (error) {
-      console.error(error);
-
+    } catch (e) {
+      console.error(e);
       return respond({
         error: "Could not save feedback. Please try again."
       }, 502);
     }
   }
 
-  // LEGACY FINALIZATION PROTECTION
+  async function updateReservation(rpc) {
+    const response = await fetch(supabaseUrl + "/rest/v1/rpc/" + rpc, {
+      method: "POST",
+      headers: serviceHeaders,
+      body: JSON.stringify({
+        p_reservation_id: reservationId,
+        p_user_id: userId
+      })
+    });
+
+    if (!response.ok) {
+      throw Error(
+        rpc + " failed: " + response.status + " " +
+        (await response.text()).slice(0, 300)
+      );
+    }
+
+    return (await response.json()) === true;
+  }
+
+  // Only cancel a reservation when the frontend explicitly cancels the
+  // complete analysis. Individual Gemini requests must not release it,
+  // because one video analysis makes multiple requests with the same ID.
+  async function releaseFailedAnalysis() {
+    return;
+  }
+
+  async function rpc(name, args) {
+    const response = await fetch(supabaseUrl + "/rest/v1/rpc/" + name, {
+      method: "POST",
+      headers: serviceHeaders,
+      body: JSON.stringify(args),
+      signal: AbortSignal.timeout(5000)
+    });
+
+    if (!response.ok) {
+      throw Error(name + " failed: " + response.status);
+    }
+
+    return await response.json();
+  }
 
   if (task === "finalize") {
     return respond({
       error: "Please refresh to use the updated analysis workflow."
     }, 409);
   }
-
-  // SAFE CLIENT CANCELLATION
 
   if (task === "cancel") {
     if (!validReservationId(reservationId)) {
@@ -440,196 +281,114 @@ export default async (request) => {
     }
 
     try {
-      const released = await updateReservation(
-        "athlescan_v2_cancel"
-      );
+      const released = await updateReservation("athlescan_v2_fail");
+
+      if (!released) {
+        console.warn(
+          "Reservation cancellation returned false; reservation may already be closed."
+        );
+      }
 
       return respond({ released });
 
     } catch (error) {
-      console.error(
-        "Could not cancel reservation:",
-        error.message
-      );
+      console.error("Could not cancel reservation:", error);
 
       return respond({
-        error: "Could not confirm reservation cancellation."
+        error: "Could not cancel reservation."
       }, 502);
     }
   }
 
-  // ANALYSIS REQUEST VALIDATION
-
-  if (
-    task === "analyze" &&
-    !validReservationId(reservationId)
-  ) {
-    return respond({
-      error: "Start a new analysis to obtain a valid reservation."
-    }, 403);
-  }
-
   if (typeof prompt !== "string" || !prompt.trim()) {
-    await cancelUnstartedReservation();
+    if (task === "analyze" && typeof reservationId === "string") {
+      await releaseFailedAnalysis();
+    }
 
     return respond({
       error: "The request is missing its prompt."
     }, 400);
   }
 
+  if (task === "analyze" && !validReservationId(reservationId)) {
+    return respond({
+      error: "Start a new analysis to obtain a valid reservation."
+    }, 403);
+  }
+
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    await cancelUnstartedReservation();
+    await releaseFailedAnalysis();
 
     return respond({
-      error: "The AI service is not configured yet. Ask the site administrator to check GEMINI_API_KEY in Netlify."
+      error: "The AI service is not configured yet. Ask the site administrator to add GEMINI_API_KEY in Netlify."
     }, 500);
   }
 
-  // SYSTEMATIC TECHNIQUE ASSESSMENT
-  // CHECKPOINT AUDIT
-  // ADAPTIVE ANNOTATION CONFIDENCE
-
-  const parts = [{
-    text: prompt.slice(0, 18000) + (
-      task === "analyze"
-        ? "\n\nMANDATORY ASSESSMENT:\n" +
-          "Complete checkpointAudit before selecting fixes. " +
-          "Independently evaluate every applicable observable sport-specific criterion. " +
-          "Classify each criterion as issue, strength, acceptable, or unassessable, with concise evidence. " +
-          "Inspect all supplied frames and relevant movement phases. " +
-          "Do not stop after identifying the first issue. " +
-          "Collect all distinct supported actionable issues, then rank them by importance. " +
-          "Return zero to five priority fixes, with no mandatory minimum. " +
-          "Include multiple fixes whenever multiple distinct actionable issues are supported. " +
-          "Never invent errors or duplicate the same underlying issue. " +
-          "Keep all fields concise and follow the structured response schema. " +
-          "Every fix must cite the exact frame and timestamp with specific visible evidence. " +
-          "Do not infer obscured anatomy or equipment. " +
-          "For every supported fix, independently attempt to locate its relevant visible region. " +
-          "Use high annotationConfidence with normalized coordinates for precise locations. " +
-          "Use medium annotationConfidence with approximate center coordinates when the broader region is identifiable but the exact point is uncertain. " +
-          "Use low annotationConfidence and null coordinates only when no reliable region can be located. " +
-          "Annotation confidence is independent of observation confidence. " +
-          "Do not default to null coordinates when the relevant region is visible. " +
-          "Never fabricate coordinates. " +
-          "Preserve all required scoring, strengths, phases, summary and action fields."
-        : ""
-    )
-  }];
+  const parts = [{ text: prompt.slice(0, 18000) }];
 
   if (task === "analyze") {
-    if (typeof sport !== "string" || !sport.trim()) {
-      await cancelUnstartedReservation();
-
-      return respond({
-        error: "Select a sport."
-      }, 400);
-    }
-
     if (
       !Array.isArray(images) ||
       images.length < 1 ||
       images.length > 6
     ) {
-      await cancelUnstartedReservation();
+      await releaseFailedAnalysis();
 
       return respond({
         error: "Each analysis request must contain 1–6 frames."
       }, 400);
     }
 
-    if (
-      !Array.isArray(frameTimes) ||
-      frameTimes.length !== images.length ||
-      !frameTimes.every((t, i) =>
-        typeof t === "string" &&
-        /^\d+\.\d{2}$/.test(t) &&
-        Number.isFinite(Number(t)) &&
-        (i === 0 || Number(t) >= Number(frameTimes[i - 1]))
-      )
-    ) {
-      await cancelUnstartedReservation();
-
-      return respond({
-        error: "Frame timestamps are invalid. Refresh the page and try again."
-      }, 400);
-    }
-
-    for (const [frameIndex, image] of images.entries()) {
+    for (const image of images) {
       if (
         typeof image !== "string" ||
         !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(image) ||
         image.length > 2_000_000
       ) {
-        await cancelUnstartedReservation();
+        await releaseFailedAnalysis();
 
         return respond({
           error: "A video frame was invalid or too large. Try a shorter or smaller clip."
         }, 400);
       }
 
-      parts.push({
-        text: "Frame " + (frameIndex + 1) +
-          " of " + images.length +
-          " at " + frameTimes[frameIndex] + " seconds"
-      });
+      const data = image.slice(image.indexOf(",") + 1);
 
       parts.push({
         inlineData: {
           mimeType: "image/jpeg",
-          data: image.slice(image.indexOf(",") + 1)
+          data
         }
       });
     }
+  }
 
-    // Atomically claim the reservation.
-    // Do not retry an uncertain claim.
+  if (task === "analyze") {
+    if (typeof sport !== "string" || !sport.trim()) {
+      return respond({
+        error: "Select a sport."
+      }, 400);
+    }
 
     try {
-      claimedByThisRequest =
-        await updateReservation("athlescan_v2_claim");
-
-      if (!claimedByThisRequest) {
-        let saved = null;
-
-        try {
-          saved = await loadSavedAnalysis();
-        } catch (error) {
-          console.error(error.message);
-        }
-
-        if (saved) {
-          return respond({
-            error: "This analysis has already been completed. View it in your dashboard.",
-            completed: true,
-            historySaved: true
-          }, 409);
-        }
-
+      if (await updateReservation("athlescan_v2_claim") !== true) {
         return respond({
-          error: "This analysis is already processing, expired, or unavailable. Check your dashboard before starting another analysis."
+          error: "Analysis already started or expired. Refresh and try again."
         }, 409);
       }
-
-    } catch (error) {
-      console.error(
-        "Reservation claim failed:",
-        error.message
-      );
+    } catch (e) {
+      console.error(e);
 
       return respond({
-        error: "Could not confirm your analysis reservation. Check your dashboard before retrying."
+        error: "Could not verify analysis reservation."
       }, 502);
     }
   }
 
-  // GEMINI ANALYSIS
-  // STRUCTURED JSON OUTPUT
-  // BOUNDED INVALID-RESPONSE RECOVERY
-
   try {
+    // Retry only overload responses; preserve the same analysis reservation.
     const primary = "gemini-3.5-flash-lite";
 
     const fallback =
@@ -639,31 +398,27 @@ export default async (request) => {
     const models = [primary, primary, fallback];
     const deadline = Date.now() + 25000;
 
-    let parsed = null;
-    let status = 502;
-    let invalidRetries = 0;
+    let upstream;
 
     for (let attempt = 0; attempt < models.length; attempt++) {
-      if (attempt && Date.now() + 3000 >= deadline) {
-        break;
-      }
+      const model = models[attempt];
 
-      if (attempt) {
-        await new Promise(r =>
-          setTimeout(r, attempt === 1 ? 2000 : 500)
+      if (attempt > 0) {
+        if (Date.now() + 3000 >= deadline) break;
+
+        await new Promise(resolve =>
+          setTimeout(resolve, attempt === 1 ? 2000 : 500)
         );
       }
 
       const remaining = deadline - Date.now();
 
-      if (remaining <= 0) {
-        break;
-      }
+      if (remaining <= 0) break;
 
       try {
         const response = await fetch(
           "https://generativelanguage.googleapis.com/v1beta/models/" +
-          encodeURIComponent(models[attempt]) +
+          encodeURIComponent(model) +
           ":generateContent",
           {
             method: "POST",
@@ -673,118 +428,139 @@ export default async (request) => {
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
-              contents: [{
-                role: "user",
-                parts
-              }],
+              contents: [
+                {
+                  role: "user",
+                  parts
+                }
+              ],
               generationConfig: {
                 thinkingConfig: {
                   thinkingLevel: "LOW"
                 },
-                maxOutputTokens: task === "plan" ? 1800 : 4096,
-                responseMimeType: "application/json",
-                responseSchema: responseSchema(task)
+                maxOutputTokens: task === "plan" ? 1800 : 3200,
+                responseMimeType: "application/json"
               }
             })
           }
         );
 
-        const result = await response.json().catch(() => null);
-
-        if (!response.ok) {
-          if (status !== 503 || response.status === 503) {
-            status = response.status;
-          }
-
+        // Preserve the original overload error if the fallback is unavailable
+        // or not enabled for this API key.
+        if (
+          attempt === 2 &&
+          !response.ok &&
+          upstream?.status === 503
+        ) {
           console.warn(
-            "Gemini HTTP error",
-            response.status,
-            models[attempt]
+            "Gemini fallback failed:",
+            model,
+            response.status
           );
 
-          if (response.status === 503) {
-            continue;
-          }
-
+          await response.body?.cancel();
           break;
         }
 
-        status = 502;
-
-        const candidate = result?.candidates?.[0];
-
-        const text = candidate
-          ?.content?.parts
-          ?.filter(p =>
-            !p.thought &&
-            typeof p.text === "string"
-          )
-          .map(p => p.text)
-          .join("")
-          .trim() || "";
-
-        console.info("Gemini response diagnostics", {
-          attempt: attempt + 1,
-          finishReason: candidate?.finishReason,
-          characters: text.length,
-          usage: result?.usageMetadata
-        });
-
-        try {
-          if (
-            candidate?.finishReason &&
-            candidate.finishReason !== "STOP"
-          ) {
-            throw Error("Incomplete generation");
-          }
-
-          const value = JSON.parse(text);
-
-          if (
-            !value ||
-            typeof value !== "object" ||
-            Array.isArray(value) ||
-            !Object.keys(value).length
-          ) {
-            throw Error("Invalid response object");
-          }
-
-          parsed = value;
-          break;
-
-        } catch (error) {
-          console.warn(
-            "Gemini invalid response",
-            error.name,
-            candidate?.finishReason
-          );
-
-          if (++invalidRetries > 1) {
-            break;
-          }
+        if (upstream) {
+          await upstream.body?.cancel();
         }
+
+        upstream = response;
+
+        if (response.status !== 503) break;
+
+        console.warn(
+          "Gemini overload:",
+          model,
+          "attempt",
+          attempt + 1
+        );
 
       } catch (error) {
+        if (!upstream) throw error;
+
         console.warn(
-          "Gemini transport failure",
-          error.name
+          "Gemini retry failed:",
+          model,
+          error.message
         );
 
         break;
       }
     }
 
-    if (!parsed) {
+    if (!upstream) {
+      throw Error("Gemini request deadline exceeded");
+    }
+
+    const result = await upstream.json().catch(() => null);
+
+    if (!upstream.ok) {
+      await releaseFailedAnalysis();
+
+      console.error("Gemini API error:", result);
+
+      if (upstream.status === 503) {
+        return respond({
+          error: "Server is currently experiencing high demand. Please try again later."
+        }, 503);
+      }
+
+      return respond({
+        error: "Gemini returned an error. Please try again later or ask the site administrator to check the Netlify function logs."
+      }, 502);
+    }
+
+    const text = result?.candidates?.[0]?.content?.parts
+      ?.map(part => part.text || "")
+      .join("")
+      .trim();
+
+    if (!text) {
+      await releaseFailedAnalysis();
+
+      console.error(
+        "Gemini returned no text:",
+        result?.promptFeedback ||
+        result?.candidates?.[0]?.finishReason
+      );
+
+      return respond({
+        error: "Gemini returned an empty response. Please try again."
+      }, 502);
+    }
+
+    let parsed;
+
+    try {
+      parsed = JSON.parse(text);
+
+    } catch {
+      await releaseFailedAnalysis();
+
+      console.error(
+        "Gemini response was not valid JSON:",
+        text.slice(0, 500)
+      );
+
+      return respond({
+        error: "The AI response could not be read. Please try again."
+      }, 502);
+    }
+
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed) ||
+      Object.keys(parsed).length === 0
+    ) {
       await releaseFailedAnalysis();
 
       return respond({
-        error: status === 503
-          ? "Server is currently experiencing high demand. Please try again later."
-          : "The AI response could not be read. Please try again."
-      }, status === 503 ? 503 : 502);
+        error: "Gemini returned an incomplete analysis. Please try again."
+      }, 502);
     }
-
-    // STANDARDIZED WEIGHTED SCORING
 
     if (task === "analyze") {
       const weights = {
@@ -798,15 +574,15 @@ export default async (request) => {
       let weight = 0;
 
       for (const [key, w] of Object.entries(weights)) {
-        const value = parsed.rubric?.[key];
+        const v = parsed.rubric?.[key];
 
         if (
-          typeof value === "number" &&
-          Number.isFinite(value) &&
-          value >= 0 &&
-          value <= 100
+          typeof v === "number" &&
+          Number.isFinite(v) &&
+          v >= 0 &&
+          v <= 100
         ) {
-          total += value * w;
+          total += v * w;
           weight += w;
         }
       }
@@ -814,12 +590,8 @@ export default async (request) => {
       if (
         !weight ||
         typeof parsed.action !== "string" ||
-        !parsed.action.trim() ||
-        typeof parsed.summary !== "string" ||
-        !parsed.summary.trim()
+        typeof parsed.summary !== "string"
       ) {
-        await releaseFailedAnalysis();
-
         return respond({
           error: "Incomplete technique assessment. Try a clearer clip."
         }, 502);
@@ -827,209 +599,17 @@ export default async (request) => {
 
       parsed.score = Math.round(total / weight);
 
-      // CHECKPOINT AUDIT DIAGNOSTICS
-
-      const audit = Array.isArray(parsed.checkpointAudit)
-        ? parsed.checkpointAudit
-        : [];
-
-      console.info("Technique checkpoint audit", {
-        total: audit.length,
-        issues: audit.filter(
-          v => v?.assessment === "issue"
-        ).length,
-        strengths: audit.filter(
-          v => v?.assessment === "strength"
-        ).length,
-        acceptable: audit.filter(
-          v => v?.assessment === "acceptable"
-        ).length,
-        unassessable: audit.filter(
-          v => v?.assessment === "unassessable"
-        ).length
-      });
-
-      // PRIORITY FIX NORMALIZATION
-
-      const rawFixes = Array.isArray(parsed.fixes)
-        ? parsed.fixes
-        : [];
-
-      const nonempty = v =>
-        typeof v === "string" && v.trim().length > 0;
-
-      parsed.strengths = Array.isArray(parsed.strengths)
-        ? parsed.strengths.filter(nonempty).slice(0, 4)
-        : [];
-
-      parsed.phases = Array.isArray(parsed.phases)
-        ? parsed.phases.filter(v =>
-            v &&
-            Number.isInteger(v.frame) &&
-            v.frame >= 1 &&
-            v.frame <= images.length &&
-            nonempty(v.observation)
-          ).slice(0, 6)
-        : [];
-
-      if (typeof parsed.instrument !== "string") {
-        parsed.instrument = "unknown";
-      }
-
-      const seen = new Set();
-      const rejected = {};
-
-      const reject = reason => {
-        rejected[reason] = (rejected[reason] || 0) + 1;
-      };
-
-      const lower = v =>
-        typeof v === "string"
-          ? v.trim().toLowerCase()
-          : "";
-
-      const numeric = v =>
-        typeof v === "number" ? v :
-        typeof v === "string" &&
-        /^\d+(?:\.\d+)?$/.test(v.trim())
-          ? Number(v.trim())
-          : NaN;
-
-      const fixes = [];
-
-      for (const raw of rawFixes) {
-        if (
-          !raw ||
-          typeof raw !== "object" ||
-          Array.isArray(raw)
-        ) {
-          reject("invalidObject");
-          continue;
-        }
-
-        const f = {
-          ...raw,
-          frame: numeric(raw.frame),
-          confidence: lower(raw.confidence),
-          visibility: lower(raw.visibility),
-          annotationConfidence: lower(raw.annotationConfidence)
-        };
-
-        if (
-          !Number.isInteger(f.frame) ||
-          f.frame < 1 ||
-          f.frame > images.length
-        ) {
-          reject("frame");
-          continue;
-        }
-
-        if (!["high", "medium"].includes(f.confidence)) {
-          reject("confidence");
-          continue;
-        }
-
-        // Accept equivalent numeric timestamp formats,
-        // but never accept a mismatched timestamp.
-
-        const t = numeric(f.timestamp);
-
-        if (
-          !Number.isFinite(t) ||
-          t !== Number(frameTimes[f.frame - 1])
-        ) {
-          reject("timestamp");
-          continue;
-        }
-
-        if (f.visibility !== "clear") {
-          reject("visibility");
-          continue;
-        }
-
-        if (![
-          f.evidence,
-          f.area,
-          f.issue,
-          f.criterion,
-          f.fix,
-          f.drill
-        ].every(nonempty)) {
-          reject("missingFields");
-          continue;
-        }
-
-        const key = f.issue.trim()
-          .toLowerCase()
-          .replace(/\s+/g, " ");
-
-        if (seen.has(key)) {
-          reject("duplicate");
-          continue;
-        }
-
-        if (fixes.length >= 5) {
-          reject("limit");
-          continue;
-        }
-
-        seen.add(key);
-
-        // ADAPTIVE ANNOTATION VALIDATION
-        // High confidence: precise circle.
-        // Medium confidence: larger approximate circle.
-        // Low confidence: no circle.
-
-        const x = numeric(f.x);
-        const y = numeric(f.y);
-
-        const pin =
-          ["high", "medium"].includes(f.annotationConfidence) &&
-          Number.isFinite(x) &&
-          Number.isFinite(y) &&
-          x >= 0 &&
-          x <= 1 &&
-          y >= 0 &&
-          y <= 1;
-
-        fixes.push({
-          ...f,
-          timestamp: frameTimes[f.frame - 1],
-          severity:
-            ["high", "medium", "low"].includes(lower(f.severity))
-              ? lower(f.severity)
-              : "medium",
-          x: pin ? x : null,
-          y: pin ? y : null,
-          annotationConfidence: pin
-            ? f.annotationConfidence
-            : "low"
-        });
-      }
-
-      console.info("Annotation diagnostics", rawFixes.map(f => ({
-        confidence: f?.annotationConfidence,
-        hasCoordinates: f?.x != null && f?.y != null
-      })));
-
-      delete parsed.checkpointAudit;
-      parsed.fixes = fixes;
-
-      console.info("Priority fix diagnostics:", {
-        generated: rawFixes.length,
-        accepted: fixes.length,
-        discarded: rawFixes.length - fixes.length,
-        availableFrames: images.length,
-        annotated: fixes.filter(
-          f => ["high", "medium"].includes(f.annotationConfidence)
-        ).length,
-        approximate: fixes.filter(
-          f => f.annotationConfidence === "medium"
-        ).length,
-        rejected
-      });
-
-      // ATOMIC FINALIZATION
+      parsed.fixes = (
+        Array.isArray(parsed.fixes)
+          ? parsed.fixes
+          : []
+      ).filter(f =>
+        f &&
+        Number.isInteger(f.frame) &&
+        f.frame >= 1 &&
+        f.frame <= images.length &&
+        f.confidence !== "low"
+      ).slice(0, 5);
 
       const args = {
         p_reservation_id: reservationId,
@@ -1038,48 +618,22 @@ export default async (request) => {
         p_result: parsed
       };
 
-      finalizationStarted = true;
       let saved = false;
 
-      for (let attempt = 0; attempt < 2; attempt++) {
+      for (let i = 0; i < 2; i++) {
         try {
-          saved = (
-            await rpc("athlescan_v2_finalize", args)
-          ) === true;
-
+          saved = await rpc("athlescan_v2_finalize", args);
           break;
-
-        } catch (error) {
-          console.error(
-            "Finalize attempt failed:",
-            attempt + 1,
-            error.message
-          );
+        } catch (e) {
+          console.error("Finalize attempt", e.message);
         }
       }
 
-      // Recover from a lost finalization response.
-
-      if (!saved) {
-        try {
-          const existing = await loadSavedAnalysis();
-          saved = Boolean(existing);
-
-        } catch (error) {
-          console.error(
-            "Finalization recovery failed:",
-            error.message
-          );
-        }
-      }
-
-      if (!saved) {
+      if (saved !== true) {
         return respond({
           error: "Could not confirm analysis storage. Check your dashboard before retrying."
         }, 502);
       }
-
-      claimedByThisRequest = false;
 
       return respond({
         result: parsed,
@@ -1088,28 +642,20 @@ export default async (request) => {
       });
     }
 
-    // Practice plan response.
-    // No additional analysis finalization.
-
-    return respond({ result: parsed }, 200);
+    return respond({
+      result: parsed
+    }, 200);
 
   } catch (error) {
-    console.error(
-      "Gemini request failed:",
-      error.message
-    );
+    console.error("Gemini request failed:", error);
 
     await releaseFailedAnalysis();
 
     return respond({
-      error: finalizationStarted
-        ? "Could not confirm analysis storage. Check your dashboard before retrying."
-        : "Could not connect to Gemini. Please try again."
+      error: "Could not connect to Gemini. Please try again."
     }, 502);
   }
 };
-
-// JSON RESPONSE HELPER
 
 function json(data, statusCode = 200, cookie = null) {
   const headers = {
@@ -1121,36 +667,27 @@ function json(data, statusCode = 200, cookie = null) {
     headers["Set-Cookie"] = cookie;
   }
 
-  return new Response(
-    JSON.stringify(data),
-    {
-      status: statusCode,
-      headers
-    }
-  );
+  return new Response(JSON.stringify(data), {
+    status: statusCode,
+    headers
+  });
 }
-
-// FIREBASE AUTHENTICATION
 
 async function verifyFirebaseToken(token, projectId) {
   const pieces = token.split(".");
 
   if (pieces.length !== 3) {
-    throw new Error("Invalid JWT format");
+    throw Error("Invalid JWT format");
   }
 
-  const fromBase64url = str =>
-    Uint8Array.from(
-      atob(
-        str.replace(/-/g, "+").replace(/_/g, "/")
-      ),
-      c => c.charCodeAt(0)
-    );
-
-  const decode = str =>
-    JSON.parse(
-      new TextDecoder().decode(fromBase64url(str))
-    );
+  const decode = (str) => JSON.parse(
+    new TextDecoder().decode(
+      Uint8Array.from(
+        atob(str.replace(/-/g, "+").replace(/_/g, "/")),
+        c => c.charCodeAt(0)
+      )
+    )
+  );
 
   const header = decode(pieces[0]);
   const claims = decode(pieces[1]);
@@ -1171,36 +708,25 @@ async function verifyFirebaseToken(token, projectId) {
     !Number.isFinite(claims.auth_time) ||
     claims.auth_time > now + 60
   ) {
-    throw new Error("Invalid Firebase token claims");
+    throw Error("Invalid Firebase token claims");
   }
 
   const response = await fetch(
-    "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com",
-    {
-      signal: AbortSignal.timeout(5000)
-    }
+    "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
   );
 
   if (!response.ok) {
-    throw new Error(
-      "Could not retrieve Firebase signing keys"
-    );
+    throw Error("Could not retrieve Firebase signing keys");
   }
 
   const { keys } = await response.json();
 
-  if (!Array.isArray(keys)) {
-    throw new Error("Invalid Firebase signing keys");
-  }
-
   const jwk = keys.find(
-    key =>
-      key.kid === header.kid &&
-      key.kty === "RSA"
+    k => k.kid === header.kid && k.kty === "RSA"
   );
 
   if (!jwk) {
-    throw new Error("Unknown Firebase signing key");
+    throw Error("Unknown Firebase signing key");
   }
 
   const key = await crypto.subtle.importKey(
@@ -1214,17 +740,20 @@ async function verifyFirebaseToken(token, projectId) {
     ["verify"]
   );
 
+  const fromBase64url = s => Uint8Array.from(
+    atob(s.replace(/-/g, "+").replace(/_/g, "/")),
+    c => c.charCodeAt(0)
+  );
+
   const valid = await crypto.subtle.verify(
     "RSASSA-PKCS1-v1_5",
     key,
     fromBase64url(pieces[2]),
-    new TextEncoder().encode(
-      pieces[0] + "." + pieces[1]
-    )
+    new TextEncoder().encode(pieces[0] + "." + pieces[1])
   );
 
   if (!valid) {
-    throw new Error("Invalid Firebase signature");
+    throw Error("Invalid Firebase signature");
   }
 
   return {
@@ -1232,8 +761,6 @@ async function verifyFirebaseToken(token, projectId) {
     email: claims.email || null
   };
 }
-
-// SIGNED GUEST COOKIES
 
 async function guestHmac(value, secret) {
   const key = await crypto.subtle.importKey(
@@ -1257,7 +784,7 @@ async function guestHmac(value, secret) {
 
   return Array.from(
     bytes,
-    byte => byte.toString(16).padStart(2, "0")
+    b => b.toString(16).padStart(2, "0")
   ).join("");
 }
 
@@ -1266,157 +793,17 @@ async function signGuestCookie(id, secret) {
 }
 
 async function verifyGuestCookie(value, secret) {
-  const match =
-    /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i
-      .exec(value);
+  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([0-9a-f]{64})$/i.exec(value);
 
-  if (!match) {
-    return null;
-  }
+  if (!m) return null;
 
-  const expected = await guestHmac(match[1], secret);
+  const expected = await guestHmac(m[1], secret);
+
   let difference = 0;
 
   for (let i = 0; i < 64; i++) {
-    difference |=
-      expected.charCodeAt(i) ^
-      match[2].charCodeAt(i);
+    difference |= expected.charCodeAt(i) ^ m[2].charCodeAt(i);
   }
 
-  return difference === 0 ? match[1] : null;
-}
-
-// STRUCTURED GEMINI RESPONSE SCHEMAS
-
-function responseSchema(task) {
-  const str = {
-    type: "STRING"
-  };
-
-  const num = {
-    type: "NUMBER",
-    nullable: true
-  };
-
-  const obj = properties => ({
-    type: "OBJECT",
-    properties,
-    required: Object.keys(properties)
-  });
-
-  const arr = (items, maxItems) => ({
-    type: "ARRAY",
-    items,
-    maxItems
-  });
-
-  const conf = {
-    type: "STRING",
-    enum: ["high", "medium", "low"]
-  };
-
-  // Five-day practice plan schema.
-
-  if (task === "plan") {
-    return obj({
-      intro: str,
-      days: arr(
-        obj({
-          day: str,
-          focus: str,
-          drills: arr(
-            obj({
-              name: str,
-              reps: str,
-              how: str
-            }),
-            3
-          )
-        }),
-        5
-      ),
-      tip: str
-    });
-  }
-
-  // Full technique analysis schema.
-
-  return obj({
-    instrument: str,
-    action: str,
-    summary: str,
-
-    score: {
-      type: "NUMBER"
-    },
-
-    rubric: obj({
-      setup: num,
-      execution: num,
-      control: num,
-      finish: num
-    }),
-
-    checkpointAudit: arr(
-      obj({
-        criterion: str,
-        assessment: {
-          type: "STRING",
-          enum: [
-            "issue",
-            "strength",
-            "acceptable",
-            "unassessable"
-          ]
-        },
-        evidence: str
-      }),
-      12
-    ),
-
-    strengths: arr(str, 4),
-
-    phases: arr(
-      obj({
-        frame: {
-          type: "INTEGER"
-        },
-        phase: str,
-        observation: str,
-        confidence: conf
-      }),
-      6
-    ),
-
-    fixes: arr(
-      obj({
-        frame: {
-          type: "INTEGER"
-        },
-
-        timestamp: str,
-
-        x: num,
-        y: num,
-
-        annotationConfidence: conf,
-
-        visibility: {
-          type: "STRING",
-          enum: ["clear", "uncertain"]
-        },
-
-        evidence: str,
-        area: str,
-        issue: str,
-        criterion: str,
-        fix: str,
-        drill: str,
-        impact: str,
-        severity: conf,
-        confidence: conf
-      }),
-      5
-    )
-  });
+  return difference === 0 ? m[1] : null;
 }
