@@ -517,7 +517,11 @@ function mk(fr,part,prior){
 "Return fewer than 3 fixes if insufficient reliable evidence exists. Never invent errors, duplicate findings, or lower confidence requirements to meet a numerical target. "+
   "If the skill or athlete cannot be evaluated, set score 0, fixes [], and explain why. Score is an approximate qualitative estimate, not an instrument measurement. "+
   "Reply ONLY with valid JSON: "+
-  JSON.stringify({instrument:"visible instrument or unknown",action:"identified action",summary:"two concise sentences",score:75,rubric:{setup:75,execution:75,control:75,finish:75},strengths:["visible strength"],phases:[{frame:1,phase:"setup",observation:"what is visible",confidence:"high"}],fixes:[{frame:1,timestamp:fr[0].t.toFixed(2),evidence:"specific visible observation",visibility:"clear",x:null,y:null,area:"body part / phase",issue:"specific visible issue",criterion:"sport-specific technique criterion",fix:"one practical cue",drill:"simple safe drill",severity:"medium",confidence:"high"}]})+
+  JSON.stringify({instrument:"visible instrument or unknown",action:"identified action",summary:"two concise sentences",score:75,rubric:{setup:75,execution:75,control:75,finish:75},strengths:["visible strength"],phases:[{frame:1,phase:"setup",observation:"what is visible",confidence:"high"}],fixes:[
+{frame:1,timestamp:fr[0].t.toFixed(2),evidence:"first distinct visible observation",visibility:"clear",x:null,y:null,area:"first relevant body part or phase",issue:"first technical issue",criterion:"relevant sport-specific technique criterion",fix:"specific coaching cue",drill:"simple safe drill",severity:"high",confidence:"high"},
+{frame:2,timestamp:fr[1].t.toFixed(2),evidence:"second distinct visible observation",visibility:"clear",x:null,y:null,area:"second relevant body part or phase",issue:"different technical issue",criterion:"relevant sport-specific technique criterion",fix:"different coaching cue",drill:"simple safe drill",severity:"medium",confidence:"high"},
+{frame:3,timestamp:fr[2].t.toFixed(2),evidence:"third distinct visible observation",visibility:"clear",x:null,y:null,area:"third relevant body part or phase",issue:"another distinct technical issue",criterion:"relevant sport-specific technique criterion",fix:"specific coaching cue",drill:"simple safe drill",severity:"medium",confidence:"medium"}
+]})+
   "\nUse frame indices from 1 to "+fr.length+". Confidence must be high, medium, or low; do not report low-confidence fixes as facts.";
 }
 function merge(a,b,per){
