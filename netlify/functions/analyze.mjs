@@ -673,11 +673,21 @@ export default async (request) => {
 
       parsed.score = Math.round(total / weight);
 
+      const rawFixes = Array.isArray(parsed.fixes) ? parsed.fixes : [];
+      const fixDiagnostics = [];
       parsed.fixes = (
         Array.isArray(parsed.fixes)
           ? parsed.fixes
           : []
-      ).filter(f =>
+      ).filter((f, index) => {
+        const reasons = [];
+        if (!f || !Number.isInteger(f.frame) || f.frame < 1 || f.frame > images.length) reasons.push("invalid_frame");
+        if (!["high", "medium"].includes(f?.confidence)) reasons.push("confidence");
+        if (f?.visibility !== "clear") reasons.push("visibility");
+        if (typeof f?.evidence !== "string" || !f.evidence.trim()) reasons.push("missing_evidence");
+        if (!f || !["string", "number"].includes(typeof f.timestamp) || !String(f.timestamp).trim() || Number(f.timestamp) !== Number(frameTimes[f.frame - 1])) reasons.push("timestamp_mismatch");
+        if (reasons.length) fixDiagnostics.push({ index: index + 1, reasons });
+        return (
         f &&
         Number.isInteger(f.frame) &&
         f.frame >= 1 &&
@@ -688,7 +698,14 @@ export default async (request) => {
         (typeof f.timestamp === "string" || typeof f.timestamp === "number") &&
         String(f.timestamp).trim() !== "" &&
         Number(f.timestamp) === Number(frameTimes[f.frame - 1])
-      ).slice(0, 5);
+        );
+      }).slice(0, 5);
+      console.info("[AthleScan fix audit]", JSON.stringify({
+        generated: rawFixes.length,
+        accepted: parsed.fixes.length,
+        rejected: fixDiagnostics,
+        capped: Math.max(0, rawFixes.length - fixDiagnostics.length - 5)
+      }));
 
       const args = {
         p_reservation_id: reservationId,
