@@ -57,9 +57,11 @@ export default async (request) => {
         bearer.replace(/^Bearer /i, ""),
         firebaseProject
       );
+
       userId = "firebase:" + user.uid;
     } catch (e) {
       console.error("Firebase authentication failed:", e.message);
+
       return json({
         error: "Your Google sign-in is invalid or expired. Please sign in again."
       }, 401);
@@ -84,6 +86,7 @@ export default async (request) => {
 
     if (!existing) {
       const value = await signGuestCookie(guestId, serviceKey);
+
       guestCookie =
         "athlescan_guest=" +
         encodeURIComponent(value) +
@@ -134,6 +137,7 @@ export default async (request) => {
     if (!validReservationId(reservationId)) {
       return false;
     }
+
     return (await rpc(name, reservationArgs)) === true;
   }
 
@@ -149,7 +153,10 @@ export default async (request) => {
       try {
         return await updateReservation("athlescan_v2_cancel");
       } catch (error) {
-        console.error("Reservation cancellation failed:", error.message);
+        console.error(
+          "Reservation cancellation failed:",
+          error.message
+        );
       }
     }
 
@@ -168,7 +175,9 @@ export default async (request) => {
 
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const released = await updateReservation("athlescan_v2_fail");
+        const released = await updateReservation(
+          "athlescan_v2_fail"
+        );
 
         if (released) {
           claimedByThisRequest = false;
@@ -176,7 +185,10 @@ export default async (request) => {
 
         return released;
       } catch (error) {
-        console.error("Reservation recovery failed:", error.message);
+        console.error(
+          "Reservation recovery failed:",
+          error.message
+        );
       }
     }
 
@@ -208,6 +220,7 @@ export default async (request) => {
     }
 
     const rows = await response.json();
+
     return Array.isArray(rows) ? rows[0] || null : null;
   }
 
@@ -236,9 +249,13 @@ export default async (request) => {
         throw new Error("History query failed: " + response.status);
       }
 
-      return respond({ analyses: await response.json() });
+      return respond({
+        analyses: await response.json()
+      });
+
     } catch (error) {
       console.error(error);
+
       return respond({
         error: "Could not load analysis history. Please try again."
       }, 502);
@@ -255,7 +272,9 @@ export default async (request) => {
     task === "delete_analysis"
   ) {
     if (!validReservationId(reservationId)) {
-      return respond({ error: "Invalid analysis reference." }, 400);
+      return respond({
+        error: "Invalid analysis reference."
+      }, 400);
     }
 
     try {
@@ -270,9 +289,17 @@ export default async (request) => {
         }, 404);
       }
 
-      return respond({ deleted: true, success: true });
+      return respond({
+        deleted: true,
+        success: true
+      });
+
     } catch (error) {
-      console.error("Analysis deletion failed:", error.message);
+      console.error(
+        "Analysis deletion failed:",
+        error.message
+      );
+
       return respond({
         error: "Could not confirm deletion. Refresh your dashboard before trying again."
       }, 502);
@@ -289,7 +316,9 @@ export default async (request) => {
         ? "athlescan_v2_status"
         : "athlescan_v2_reserve";
 
-      const data = await rpc(name, { p_user_id: userId });
+      const data = await rpc(name, {
+        p_user_id: userId
+      });
 
       if (!data || typeof data !== "object") {
         throw new Error("Invalid usage response");
@@ -326,8 +355,10 @@ export default async (request) => {
         reservationId: data.reservation_id,
         remaining: data.remaining
       });
+
     } catch (error) {
       console.error(error);
+
       return respond({
         error: task === "status"
           ? "Could not check your analysis limit. Please try again."
@@ -377,7 +408,9 @@ export default async (request) => {
           }, 409);
         }
 
-        throw new Error("Feedback RPC failed: " + response.status);
+        throw new Error(
+          "Feedback RPC failed: " + response.status
+        );
       }
 
       if (await response.json() !== true) {
@@ -387,8 +420,10 @@ export default async (request) => {
       }
 
       return respond({ saved: true });
+
     } catch (error) {
       console.error(error);
+
       return respond({
         error: "Could not save feedback. Please try again."
       }, 502);
@@ -411,14 +446,24 @@ export default async (request) => {
 
   if (task === "cancel") {
     if (!validReservationId(reservationId)) {
-      return respond({ error: "Invalid reservation." }, 400);
+      return respond({
+        error: "Invalid reservation."
+      }, 400);
     }
 
     try {
-      const released = await updateReservation("athlescan_v2_cancel");
+      const released = await updateReservation(
+        "athlescan_v2_cancel"
+      );
+
       return respond({ released });
+
     } catch (error) {
-      console.error("Could not cancel reservation:", error.message);
+      console.error(
+        "Could not cancel reservation:",
+        error.message
+      );
+
       return respond({
         error: "Could not confirm reservation cancellation."
       }, 502);
@@ -440,6 +485,7 @@ export default async (request) => {
 
   if (typeof prompt !== "string" || !prompt.trim()) {
     await cancelUnstartedReservation();
+
     return respond({
       error: "The request is missing its prompt."
     }, 400);
@@ -449,40 +495,87 @@ export default async (request) => {
 
   if (!apiKey) {
     await cancelUnstartedReservation();
+
     return respond({
       error: "The AI service is not configured yet. Ask the site administrator to check GEMINI_API_KEY in Netlify."
     }, 500);
   }
 
   // ---------------------------------------
-  // PRIORITY FIX INSTRUCTIONS
+  // SYSTEMATIC TECHNIQUE ASSESSMENT
+  // EVIDENCE-FIRST PRIORITY FIX GENERATION
   // ADAPTIVE ANNOTATION CONFIDENCE
   // ---------------------------------------
 
   const parts = [{
     text: prompt.slice(0, 18000) + (
       task === "analyze"
-        ? "\n\nPRIORITY FIX REQUIREMENTS:\n" +
-          "- Examine every supplied frame before selecting corrections.\n" +
-          "- Aim for 3–5 distinct actionable corrections when supported by visible evidence. There is no mandatory minimum.\n" +
-          "- Do not stop examining technique after identifying the first issue.\n" +
-          "- Systematically examine setup, execution, control, finish, and all relevant sport-specific criteria.\n" +
-          "- Multiple corrections may reference the same frame if they describe distinct technique issues.\n" +
+        ? "\n\nMANDATORY TECHNIQUE ASSESSMENT PROCEDURE:\n" +
+
+          "Complete the entire assessment before selecting the final priority fixes. " +
+          "Do not stop after identifying the first visible mistake.\n\n" +
+
+          "STAGE 1 — IDENTIFY AND INSPECT:\n" +
+          "- Identify the specific action being performed in the selected sport.\n" +
+          "- Examine every supplied frame in chronological order.\n" +
+          "- Identify which movement phases and sport-specific technique criteria are applicable.\n" +
+          "- Evaluate each applicable criterion independently rather than treating the movement as a single overall impression.\n" +
+          "- Assess setup, execution, control, finish, and transitions between phases where visible.\n" +
+          "- Examine relevant alignment, positioning, coordination, timing, balance, movement path, and equipment handling when applicable.\n" +
+          "- Do not apply irrelevant criteria to the selected sport or action.\n" +
+          "- Treat obscured, submerged, cropped, or otherwise unobservable details as unassessable.\n\n" +
+
+          "STAGE 2 — COLLECT SUPPORTED FINDINGS:\n" +
+          "- Identify all distinct actionable technique issues supported by visible evidence across the supplied frames.\n" +
+          "- Continue evaluating the remaining applicable criteria after finding an issue.\n" +
+          "- Consider each movement phase independently before deciding that no additional corrections are necessary.\n" +
+          "- A single frame may support multiple distinct corrections if each has its own visible evidence and technique criterion.\n" +
+          "- Distinguish genuinely separate issues from repeated descriptions of the same underlying mistake.\n" +
+          "- Do not manufacture errors, exaggerate minor variations, or assume that a technique is incorrect merely because it differs from a generic reference.\n" +
+          "- Do not infer hidden anatomy, invisible equipment positions, or movements that cannot be established from the supplied evidence.\n\n" +
+
+          "STAGE 3 — SELECT AND RANK:\n" +
+          "- After completing the full assessment, rank supported findings by their practical importance to the athlete's technique.\n" +
+          "- Return up to five distinct actionable priority fixes.\n" +
+          "- There is no mandatory minimum number of corrections.\n" +
+          "- Return zero fixes if no supported actionable issue exists.\n" +
+          "- Return one fix if exactly one supported actionable issue exists.\n" +
+          "- Return multiple fixes whenever multiple distinct actionable issues are supported.\n" +
+          "- Do not omit additional supported corrections simply because one correction is more important than the others.\n" +
+          "- The number of objects shown in the example JSON array is illustrative and is not a limit on the number of fixes.\n" +
+          "- Do not return the assessment stages as additional prose. Preserve the requested JSON response structure.\n\n" +
+
+          "PRIORITY FIX EVIDENCE REQUIREMENTS:\n" +
           "- Every correction must include specific visible evidence, visibility (clear or uncertain), and the exact timestamp of its cited frame.\n" +
           "- Use an integer frame number between 1 and " +
           (Array.isArray(images) ? images.length : 0) + ".\n" +
           "- Use lowercase observation confidence values: high, medium, or low.\n" +
-          "- Assess annotationConfidence independently of observation confidence. A medium-confidence correction may have a high-confidence annotation location.\n" +
+          "- Each correction must identify the relevant technique criterion, specific issue, practical coaching cue, and safe drill.\n" +
+          "- Ensure the cited frame actually demonstrates the described issue.\n" +
+          "- Do not repeat the same correction in different words.\n" +
+          "- Omit unsupported findings.\n\n" +
+
+          "ADAPTIVE ANNOTATION REQUIREMENTS:\n" +
+          "- Assess annotationConfidence independently of observation confidence.\n" +
+          "- A medium-confidence correction may have a high-confidence annotation location.\n" +
           "- Use annotationConfidence high when the relevant visible body part or equipment can be located precisely.\n" +
-          "- Use annotationConfidence medium when the relevant region is identifiable but its exact location is uncertain because of distance, slight blur, partial visibility, or camera angle. Supply the approximate center of that visible region.\n" +
+          "- Use annotationConfidence medium when the relevant region is identifiable but its exact location is uncertain because of distance, slight blur, partial visibility, or camera angle.\n" +
+          "- For medium annotation confidence, supply the approximate center of the identifiable visible region.\n" +
           "- Use annotationConfidence low and null coordinates when no reliable location can be identified.\n" +
-          "- High-confidence annotations are displayed as small precise circles. Medium-confidence annotations are displayed as larger approximate circles.\n" +
+          "- High-confidence annotations are displayed as small precise circles.\n" +
+          "- Medium-confidence annotations are displayed as larger approximate circles.\n" +
           "- Do not assign low annotation confidence merely because the exact point is unclear if the broader relevant region is reliably identifiable.\n" +
           "- A larger annotation is not a substitute for evidence supporting the correction itself.\n" +
           "- Coordinates must be normalized to the image dimensions, between 0 and 1.\n" +
-          "- Do not repeat the same correction in different words.\n" +
-          "- Omit unsupported findings. Never infer the position of obscured anatomy or equipment.\n" +
-          "- Return fewer corrections when the evidence genuinely supports fewer. Never invent technique problems."
+          "- Coordinates must refer to the exact frame cited by the correction.\n\n" +
+
+          "FINAL QUALITY CHECK:\n" +
+          "- Confirm that all applicable observable technique criteria have been considered.\n" +
+          "- Confirm that every returned correction is distinct, actionable, and supported by its cited frame.\n" +
+          "- Confirm that all frame numbers, timestamps, confidence values, and annotation coordinates are valid.\n" +
+          "- Preserve the requested action identification, summary, strengths, scoring rubric, movement phases, and all other required JSON fields.\n" +
+          "- Return only valid JSON in the requested structure.\n" +
+          "- Prioritize accuracy and completeness over correction quantity. Never invent technique problems."
         : ""
     )
   }];
@@ -490,7 +583,10 @@ export default async (request) => {
   if (task === "analyze") {
     if (typeof sport !== "string" || !sport.trim()) {
       await cancelUnstartedReservation();
-      return respond({ error: "Select a sport." }, 400);
+
+      return respond({
+        error: "Select a sport."
+      }, 400);
     }
 
     if (
@@ -499,6 +595,7 @@ export default async (request) => {
       images.length > 6
     ) {
       await cancelUnstartedReservation();
+
       return respond({
         error: "Each analysis request must contain 1–6 frames."
       }, 400);
@@ -515,6 +612,7 @@ export default async (request) => {
       )
     ) {
       await cancelUnstartedReservation();
+
       return respond({
         error: "Frame timestamps are invalid. Refresh the page and try again."
       }, 400);
@@ -527,6 +625,7 @@ export default async (request) => {
         image.length > 2_000_000
       ) {
         await cancelUnstartedReservation();
+
         return respond({
           error: "A video frame was invalid or too large. Try a shorter or smaller clip."
         }, 400);
@@ -574,8 +673,13 @@ export default async (request) => {
           error: "This analysis is already processing, expired, or unavailable. Check your dashboard before starting another analysis."
         }, 409);
       }
+
     } catch (error) {
-      console.error("Reservation claim failed:", error.message);
+      console.error(
+        "Reservation claim failed:",
+        error.message
+      );
+
       return respond({
         error: "Could not confirm your analysis reservation. Check your dashboard before retrying."
       }, 502);
@@ -588,6 +692,7 @@ export default async (request) => {
 
   try {
     const primary = "gemini-3.5-flash-lite";
+
     const fallback =
       process.env.GEMINI_FALLBACK_MODEL ||
       "gemini-3-flash-preview";
@@ -649,7 +754,12 @@ export default async (request) => {
           !response.ok &&
           upstream?.status === 503
         ) {
-          console.warn("Gemini fallback failed:", model, response.status);
+          console.warn(
+            "Gemini fallback failed:",
+            model,
+            response.status
+          );
+
           await response.body?.cancel();
           break;
         }
@@ -664,13 +774,24 @@ export default async (request) => {
           break;
         }
 
-        console.warn("Gemini overload:", model, "attempt", attempt + 1);
+        console.warn(
+          "Gemini overload:",
+          model,
+          "attempt",
+          attempt + 1
+        );
+
       } catch (error) {
         if (!upstream) {
           throw error;
         }
 
-        console.warn("Gemini retry failed:", model, error.message);
+        console.warn(
+          "Gemini retry failed:",
+          model,
+          error.message
+        );
+
         break;
       }
     }
@@ -683,7 +804,11 @@ export default async (request) => {
 
     if (!upstream.ok) {
       await releaseFailedAnalysis();
-      console.error("Gemini API error status:", upstream.status);
+
+      console.error(
+        "Gemini API error status:",
+        upstream.status
+      );
 
       if (upstream.status === 503) {
         return respond({
@@ -726,7 +851,10 @@ export default async (request) => {
       parsed = JSON.parse(text);
     } catch {
       await releaseFailedAnalysis();
-      console.error("Gemini response was not valid JSON.");
+
+      console.error(
+        "Gemini response was not valid JSON."
+      );
 
       return respond({
         error: "The AI response could not be read. Please try again."
@@ -740,6 +868,7 @@ export default async (request) => {
       Object.keys(parsed).length === 0
     ) {
       await releaseFailedAnalysis();
+
       return respond({
         error: "Gemini returned an incomplete analysis. Please try again."
       }, 502);
@@ -782,6 +911,7 @@ export default async (request) => {
         !parsed.summary.trim()
       ) {
         await releaseFailedAnalysis();
+
         return respond({
           error: "Incomplete technique assessment. Try a clearer clip."
         }, 502);
@@ -826,7 +956,9 @@ export default async (request) => {
       };
 
       const lower = v =>
-        typeof v === "string" ? v.trim().toLowerCase() : "";
+        typeof v === "string"
+          ? v.trim().toLowerCase()
+          : "";
 
       const numeric = v =>
         typeof v === "number" ? v :
@@ -946,7 +1078,9 @@ export default async (request) => {
               : "medium",
           x: pin ? x : null,
           y: pin ? y : null,
-          annotationConfidence: pin ? f.annotationConfidence : "low"
+          annotationConfidence: pin
+            ? f.annotationConfidence
+            : "low"
         });
       }
 
@@ -987,6 +1121,7 @@ export default async (request) => {
           ) === true;
 
           break;
+
         } catch (error) {
           console.error(
             "Finalize attempt failed:",
@@ -1002,6 +1137,7 @@ export default async (request) => {
         try {
           const existing = await loadSavedAnalysis();
           saved = Boolean(existing);
+
         } catch (error) {
           console.error(
             "Finalization recovery failed:",
@@ -1031,7 +1167,11 @@ export default async (request) => {
     return respond({ result: parsed }, 200);
 
   } catch (error) {
-    console.error("Gemini request failed:", error.message);
+    console.error(
+      "Gemini request failed:",
+      error.message
+    );
+
     await releaseFailedAnalysis();
 
     return respond({
@@ -1119,7 +1259,9 @@ async function verifyFirebaseToken(token, projectId) {
   );
 
   if (!response.ok) {
-    throw new Error("Could not retrieve Firebase signing keys");
+    throw new Error(
+      "Could not retrieve Firebase signing keys"
+    );
   }
 
   const { keys } = await response.json();
