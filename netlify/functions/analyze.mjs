@@ -881,17 +881,37 @@ export default async (request) => {
 
       parsed.score = Math.round(total / weight);
 
-      parsed.fixes = (
-        Array.isArray(parsed.fixes)
-          ? parsed.fixes
-          : []
-      ).filter(f =>
-        f &&
-        Number.isInteger(f.frame) &&
-        f.frame >= 1 &&
-        f.frame <= images.length &&
-        f.confidence !== "low"
-      ).slice(0, 5);
+    const rawFixes = Array.isArray(parsed.fixes)
+  ? parsed.fixes
+  : [];
+
+parsed.fixes = rawFixes
+  .filter(f => f && typeof f === "object" && !Array.isArray(f))
+  .map(f => ({
+    ...f,
+    frame:
+      typeof f.frame === "string" && /^\d+$/.test(f.frame.trim())
+        ? Number(f.frame.trim())
+        : f.frame,
+    confidence:
+      typeof f.confidence === "string"
+        ? f.confidence.trim().toLowerCase()
+        : f.confidence
+  }))
+  .filter(f =>
+    Number.isInteger(f.frame) &&
+    f.frame >= 1 &&
+    f.frame <= images.length &&
+    f.confidence !== "low"
+  )
+  .slice(0, 5);
+
+console.info("Priority fix diagnostics:", {
+  generated: rawFixes.length,
+  accepted: parsed.fixes.length,
+  discarded: rawFixes.length - parsed.fixes.length,
+  availableFrames: images.length
+});
 
       // ---------------------------------------
       // ATOMIC FINALIZATION
