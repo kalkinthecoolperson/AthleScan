@@ -10,7 +10,7 @@ export default async (request) => {
     return json({ error: "The request was not valid JSON." }, 400);
   }
 
-  const { task, prompt, images, reservationId, rating, sport, result } = body || {};
+  const { task, prompt, images, frameTimes, reservationId, rating, sport, result } = body || {};
   const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const firebaseProject = "athlescan-auth";
@@ -400,7 +400,13 @@ export default async (request) => {
       }, 400);
     }
 
-    for (const image of images) {
+    if (!Array.isArray(frameTimes) || frameTimes.length !== images.length ||
+        !frameTimes.every((t, i) => typeof t === "string" && /^\d+\.\d{2}$/.test(t) && Number.isFinite(Number(t)) && (i === 0 || Number(t) >= Number(frameTimes[i-1])))) {
+      await releaseFailedAnalysis();
+      return respond({ error: "Invalid frame timestamps. Refresh and try again." }, 400);
+    }
+
+    for (const [i, image] of images.entries()) {
       if (
         typeof image !== "string" ||
         !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(image) ||
@@ -415,6 +421,7 @@ export default async (request) => {
 
       const data = image.slice(image.indexOf(",") + 1);
 
+      parts.push({ text: `Frame ${i + 1} at ${frameTimes[i]} seconds` });
       parts.push({
         inlineData: {
           mimeType: "image/jpeg",
@@ -675,7 +682,12 @@ export default async (request) => {
         Number.isInteger(f.frame) &&
         f.frame >= 1 &&
         f.frame <= images.length &&
-        f.confidence !== "low"
+        ["high", "medium"].includes(f.confidence) &&
+        f.visibility === "clear" &&
+        typeof f.evidence === "string" && f.evidence.trim().length > 0 &&
+        (typeof f.timestamp === "string" || typeof f.timestamp === "number") &&
+        String(f.timestamp).trim() !== "" &&
+        Number(f.timestamp) === Number(frameTimes[f.frame - 1])
       ).slice(0, 5);
 
       const args = {
