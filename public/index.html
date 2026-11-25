@@ -496,7 +496,7 @@ function criteriaFor(s,focus){
   ].join("\n");
   return [
     "Sport: "+s,
-    "Possible sport-specific actions: "+(skills.length?skills.join(", "):"Identify the exact action from visible evidence."),
+    "Example sport-specific actions (non-exhaustive): "+(skills.length?skills.join(", "):"No predefined examples available.")+". Identify the exact action, technique, drill, or movement variation from visible evidence, even if it is not listed above. Treat these examples as guidance, not classification restrictions. Distinguish complete movements from isolated drills and individual movement phases. Use the most specific accurate action name supported by the footage. Never force an action into a predefined category.",
     "User-requested focus: "+(focus||"overall technique"),
     "Known sport checkpoints (apply ONLY if relevant to the identified action): "+(checkpoints?checkpoints.join("; "):"Evaluate visible setup, posture, balance, timing, movement sequence, and controlled finish using appropriate sport-specific mechanics."),
     "For the exact action, evaluate its preparation/setup, execution/contact or power phase, and recovery/follow-through; do not apply criteria for other actions.",
