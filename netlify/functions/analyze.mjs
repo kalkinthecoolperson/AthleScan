@@ -456,6 +456,7 @@ export default async (request) => {
 
   // ---------------------------------------
   // PRIORITY FIX INSTRUCTIONS
+  // ADAPTIVE ANNOTATION CONFIDENCE
   // ---------------------------------------
 
   const parts = [{
@@ -472,7 +473,12 @@ export default async (request) => {
           (Array.isArray(images) ? images.length : 0) + ".\n" +
           "- Use lowercase observation confidence values: high, medium, or low.\n" +
           "- Assess annotationConfidence independently of observation confidence. A medium-confidence correction may have a high-confidence annotation location.\n" +
-          "- Use high annotation confidence when the relevant visible body part or equipment can be located precisely. Otherwise use low annotation confidence and null coordinates.\n" +
+          "- Use annotationConfidence high when the relevant visible body part or equipment can be located precisely.\n" +
+          "- Use annotationConfidence medium when the relevant region is identifiable but its exact location is uncertain because of distance, slight blur, partial visibility, or camera angle. Supply the approximate center of that visible region.\n" +
+          "- Use annotationConfidence low and null coordinates when no reliable location can be identified.\n" +
+          "- High-confidence annotations are displayed as small precise circles. Medium-confidence annotations are displayed as larger approximate circles.\n" +
+          "- Do not assign low annotation confidence merely because the exact point is unclear if the broader relevant region is reliably identifiable.\n" +
+          "- A larger annotation is not a substitute for evidence supporting the correction itself.\n" +
           "- Coordinates must be normalized to the image dimensions, between 0 and 1.\n" +
           "- Do not repeat the same correction in different words.\n" +
           "- Omit unsupported findings. Never infer the position of obscured anatomy or equipment.\n" +
@@ -909,6 +915,13 @@ export default async (request) => {
 
         seen.add(key);
 
+        // ---------------------------------------
+        // ADAPTIVE ANNOTATION VALIDATION
+        // ---------------------------------------
+        // High confidence: precise circle.
+        // Medium confidence: larger approximate circle.
+        // Low confidence: no circle.
+        //
         // Annotation confidence is independent
         // of observation confidence.
 
@@ -916,7 +929,7 @@ export default async (request) => {
         const y = numeric(f.y);
 
         const pin =
-          f.annotationConfidence === "high" &&
+          ["high", "medium"].includes(f.annotationConfidence) &&
           Number.isFinite(x) &&
           Number.isFinite(y) &&
           x >= 0 &&
@@ -933,7 +946,7 @@ export default async (request) => {
               : "medium",
           x: pin ? x : null,
           y: pin ? y : null,
-          annotationConfidence: pin ? "high" : "low"
+          annotationConfidence: pin ? f.annotationConfidence : "low"
         });
       }
 
@@ -945,7 +958,10 @@ export default async (request) => {
         discarded: rawFixes.length - fixes.length,
         availableFrames: images.length,
         annotated: fixes.filter(
-          f => f.annotationConfidence === "high"
+          f => ["high", "medium"].includes(f.annotationConfidence)
+        ).length,
+        approximate: fixes.filter(
+          f => f.annotationConfidence === "medium"
         ).length,
         rejected
       });
