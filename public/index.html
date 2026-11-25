@@ -330,6 +330,9 @@ html,body{background:#10090c!important;background-image:none!important;backgroun
 .dashboard-entry summary{cursor:pointer;color:#f7d4d9}
 @media(max-width:760px){.dashboard-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-head{align-items:flex-start}.dashboard-new{font-size:12px;padding:9px}.top{gap:12px}}
 @media(max-width:420px){.tabs{gap:6px}.tabs button{font-size:11px;padding:8px 2px}.logo .wm{font-size:9px}.account-button{font-size:10px;padding:8px 6px}}
+.dashboard-actions{display:flex;align-items:center;gap:10px;flex:none}
+.dashboard-trash{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border:0;background:transparent;color:#ff7886;border-radius:8px;cursor:pointer}
+.dashboard-trash:hover{background:#42161f}.dashboard-trash:focus-visible{outline:2px solid #ff7886}.dashboard-trash:disabled{opacity:.5;cursor:wait}
 </style>
 </head>
 <body>
@@ -633,7 +636,19 @@ async function loadDashboard(){
     if(x.summary)left.appendChild(el("p","ref",x.summary));
     var fixes=Array.isArray(x.fixes)?x.fixes:[];
     if(fixes.length){var details=el("details"),summary=el("summary",null,"View saved technique feedback"),ul=el("ul");details.appendChild(summary);fixes.forEach(function(f){ul.appendChild(el("li",null,(f.area?f.area+": ":"")+(f.issue||"")+(f.fix?" — "+f.fix:"")))});details.appendChild(ul);left.appendChild(details)}
-    item.appendChild(left);item.appendChild(right);recent.appendChild(item);
+    var actions=el("div","dashboard-actions");actions.appendChild(right);
+    if(x.reservation_id){
+      var trash=el("button","dashboard-trash");trash.type="button";trash.title="Delete analysis";trash.setAttribute("aria-label","Delete analysis");
+      trash.innerHTML='<svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';
+      trash.onclick=async function(){
+        if(!confirm("Permanently delete this analysis? This will not restore an analysis credit."))return;
+        trash.disabled=true;
+        try{var result=await apiTask({task:"delete",reservationId:x.reservation_id});if(result.deleted!==true)throw Error("Deletion not confirmed.");await loadDashboard()}
+        catch(error){message.textContent=error.message||"Could not delete analysis.";trash.disabled=false}
+      };
+      actions.appendChild(trash);
+    }
+    item.appendChild(left);item.appendChild(actions);recent.appendChild(item);
   });
   renderSportTabs(rows);
 }
