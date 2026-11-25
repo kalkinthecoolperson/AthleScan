@@ -42,8 +42,8 @@ video{width:100%;border-radius:12px;margin-top:12px;background:#000;max-height:5
 .fix{border-left:5px solid var(--warn);padding-left:12px;margin-top:16px}
 .fix.high{border-color:var(--bad)}.fix.low{border-color:var(--mid)}
 .fix h3{margin:0 0 4px;font-size:17px}.tag{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--mute)}
-.fr{position:relative;margin:8px 0;border-radius:10px;overflow:hidden;line-height:0}.fr img{width:100%}
-.pin{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;border:3px solid var(--bad);border-radius:50%;box-shadow:0 0 0 2px #fff8;animation:p 1.4s infinite}
+.fr{container-type:inline-size;position:relative;margin:8px 0;border-radius:10px;overflow:hidden;line-height:0}.fr img{width:100%}
+.pin{position:absolute;--pin-size:44px;width:var(--pin-size);height:var(--pin-size);margin:calc(var(--pin-size) / -2) 0 0 calc(var(--pin-size) / -2);border:3px solid var(--bad);border-radius:50%;box-shadow:0 0 0 2px #fff8;animation:p 1.4s infinite}
 @keyframes p{50%{transform:scale(1.25);opacity:.6}}
 .fix .do{background:color-mix(in srgb,var(--acc) 12%,transparent);padding:10px;border-radius:10px;margin:8px 0}
 ul{margin:6px 0 0;padding-left:20px}.note{font-size:13px;color:var(--mute);margin-top:18px}
@@ -575,6 +575,15 @@ c.appendChild(el("p","note",r.tip||"Rest if anything hurts, and check with a coa
 catch(e){pc.appendChild(el("p","note",(e&&e.message)||"Couldn’t build a plan. Try again."));btn.textContent="Build my practice plan"}
 btn.disabled=false}
 function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+// Stage 5: estimate marker diameter from the existing area label only.
+function pinSize(area){
+  var label=String(area||"").toLowerCase();
+  var small=/\b(wrists?|hands?|fingers?|ankles?|feet|foot|toes?|elbows?|knees?|head|neck)\b/;
+  var large=/\b(full body|whole body|entire body|torso|trunk|upper body|lower body|body alignment|body position|posture|streamline)\b/;
+  var medium=/\b(arms?|legs?|hips?|shoulders?|chest|back|core)\b/;
+  var size=large.test(label)?15:medium.test(label)?10:small.test(label)?6:8;
+  return "clamp(28px, "+size+"cqw, 108px)";
+}
 function render(r,fr){var o=$("out");o.textContent="";o.classList.remove("hide");
 var c=el("div","card"),s=el("div","score");s.appendChild(el("div","n",String(r.score||0)));var sd=el("div");sd.appendChild(el("b",null,"Form score vs pro"));if(sport==="Marching Band"&&r.instrument&&r.instrument.toLowerCase()!=="unknown")sd.appendChild(el("div","tag","Instrument: "+r.instrument));if(r.action)sd.appendChild(el("div","tag","Action identified: "+r.action));sd.appendChild(el("div",null,r.summary||""));s.appendChild(sd);c.appendChild(s);
 var st=el("div","strip");fr.forEach(function(f){var w=el("div","frame-thumb");var i=new Image();i.src=f.url;i.alt="Video frame at "+f.t.toFixed(2)+" seconds";w.appendChild(i);w.appendChild(el("span",null,f.t.toFixed(2)+"s"));st.appendChild(w)});c.appendChild(st);o.appendChild(c);
@@ -587,7 +596,7 @@ if(x.criterion)d.appendChild(el("p","ref","Technique checkpoint: "+x.criterion))
 if(x.confidence)d.appendChild(el("div","tag","Observation confidence: "+x.confidence));
 var fm=fr[Math.max(0,Math.min(fr.length-1,(x.frame||1)-1))];d.appendChild(el("div","tag","Video timestamp: "+fm.t.toFixed(2)+"s · sampled frame "+x.frame));
 var w=el("div","fr"),im=new Image();im.src=fm.url;im.alt="Frame at "+fm.t.toFixed(1)+" seconds";w.appendChild(im);
-if(Number.isFinite(x.x)&&Number.isFinite(x.y)&&x.x>=0&&x.x<=1&&x.y>=0&&x.y<=1){var p=el("div","pin");p.style.left=(x.x*100)+"%";p.style.top=(x.y*100)+"%";w.appendChild(p)}d.appendChild(w);
+if(Number.isFinite(x.x)&&Number.isFinite(x.y)&&x.x>=0&&x.x<=1&&x.y>=0&&x.y<=1){var p=el("div","pin");p.style.setProperty("--pin-size",pinSize(x.area));p.style.left=(x.x*100)+"%";p.style.top=(x.y*100)+"%";w.appendChild(p)}d.appendChild(w);
 var a=el("div","do");a.appendChild(el("b",null,"Try this: "));a.appendChild(document.createTextNode(x.fix||""));d.appendChild(a);
 if(x.drill){var dr=el("div");dr.appendChild(el("b",null,"Drill: "));dr.appendChild(document.createTextNode(x.drill));d.appendChild(dr)}f.appendChild(d)});
 if(!(r.fixes||[]).length)f.appendChild(el("p",null,"No fixes to show – try a clip with your whole body visible."));
