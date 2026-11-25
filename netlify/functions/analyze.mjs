@@ -510,72 +510,7 @@ export default async (request) => {
   const parts = [{
     text: prompt.slice(0, 18000) + (
       task === "analyze"
-        ? "\n\nMANDATORY TECHNIQUE ASSESSMENT PROCEDURE:\n" +
-
-          "Complete the entire assessment before selecting the final priority fixes. " +
-          "Do not stop after identifying the first visible mistake.\n\n" +
-
-          "STAGE 1 — IDENTIFY AND INSPECT:\n" +
-          "- Identify the specific action being performed in the selected sport.\n" +
-          "- Examine every supplied frame in chronological order.\n" +
-          "- Identify which movement phases and sport-specific technique criteria are applicable.\n" +
-          "- Evaluate each applicable criterion independently rather than treating the movement as a single overall impression.\n" +
-          "- Assess setup, execution, control, finish, and transitions between phases where visible.\n" +
-          "- Examine relevant alignment, positioning, coordination, timing, balance, movement path, and equipment handling when applicable.\n" +
-          "- Do not apply irrelevant criteria to the selected sport or action.\n" +
-          "- Treat obscured, submerged, cropped, or otherwise unobservable details as unassessable.\n\n" +
-
-          "STAGE 2 — COLLECT SUPPORTED FINDINGS:\n" +
-          "- Identify all distinct actionable technique issues supported by visible evidence across the supplied frames.\n" +
-          "- Continue evaluating the remaining applicable criteria after finding an issue.\n" +
-          "- Consider each movement phase independently before deciding that no additional corrections are necessary.\n" +
-          "- A single frame may support multiple distinct corrections if each has its own visible evidence and technique criterion.\n" +
-          "- Distinguish genuinely separate issues from repeated descriptions of the same underlying mistake.\n" +
-          "- Do not manufacture errors, exaggerate minor variations, or assume that a technique is incorrect merely because it differs from a generic reference.\n" +
-          "- Do not infer hidden anatomy, invisible equipment positions, or movements that cannot be established from the supplied evidence.\n\n" +
-
-          "STAGE 3 — SELECT AND RANK:\n" +
-          "- After completing the full assessment, rank supported findings by their practical importance to the athlete's technique.\n" +
-          "- Return up to five distinct actionable priority fixes.\n" +
-          "- There is no mandatory minimum number of corrections.\n" +
-          "- Return zero fixes if no supported actionable issue exists.\n" +
-          "- Return one fix if exactly one supported actionable issue exists.\n" +
-          "- Return multiple fixes whenever multiple distinct actionable issues are supported.\n" +
-          "- Do not omit additional supported corrections simply because one correction is more important than the others.\n" +
-          "- The number of objects shown in the example JSON array is illustrative and is not a limit on the number of fixes.\n" +
-          "- Do not return the assessment stages as additional prose. Preserve the requested JSON response structure.\n\n" +
-
-          "PRIORITY FIX EVIDENCE REQUIREMENTS:\n" +
-          "- Every correction must include specific visible evidence, visibility (clear or uncertain), and the exact timestamp of its cited frame.\n" +
-          "- Use an integer frame number between 1 and " +
-          (Array.isArray(images) ? images.length : 0) + ".\n" +
-          "- Use lowercase observation confidence values: high, medium, or low.\n" +
-          "- Each correction must identify the relevant technique criterion, specific issue, practical coaching cue, and safe drill.\n" +
-          "- Ensure the cited frame actually demonstrates the described issue.\n" +
-          "- Do not repeat the same correction in different words.\n" +
-          "- Omit unsupported findings.\n\n" +
-
-          "ADAPTIVE ANNOTATION REQUIREMENTS:\n" +
-          "- Assess annotationConfidence independently of observation confidence.\n" +
-          "- A medium-confidence correction may have a high-confidence annotation location.\n" +
-          "- Use annotationConfidence high when the relevant visible body part or equipment can be located precisely.\n" +
-          "- Use annotationConfidence medium when the relevant region is identifiable but its exact location is uncertain because of distance, slight blur, partial visibility, or camera angle.\n" +
-          "- For medium annotation confidence, supply the approximate center of the identifiable visible region.\n" +
-          "- Use annotationConfidence low and null coordinates when no reliable location can be identified.\n" +
-          "- High-confidence annotations are displayed as small precise circles.\n" +
-          "- Medium-confidence annotations are displayed as larger approximate circles.\n" +
-          "- Do not assign low annotation confidence merely because the exact point is unclear if the broader relevant region is reliably identifiable.\n" +
-          "- A larger annotation is not a substitute for evidence supporting the correction itself.\n" +
-          "- Coordinates must be normalized to the image dimensions, between 0 and 1.\n" +
-          "- Coordinates must refer to the exact frame cited by the correction.\n\n" +
-
-          "FINAL QUALITY CHECK:\n" +
-          "- Confirm that all applicable observable technique criteria have been considered.\n" +
-          "- Confirm that every returned correction is distinct, actionable, and supported by its cited frame.\n" +
-          "- Confirm that all frame numbers, timestamps, confidence values, and annotation coordinates are valid.\n" +
-          "- Preserve the requested action identification, summary, strengths, scoring rubric, movement phases, and all other required JSON fields.\n" +
-          "- Return only valid JSON in the requested structure.\n" +
-          "- Prioritize accuracy and completeness over correction quantity. Never invent technique problems."
+        ? "\nAudit every applicable criterion before ranking all distinct visible issues. Return zero to five supported fixes, not a quota. Keep each field concise. Follow the exact response schema and frame timestamps. Never infer hidden anatomy or fabricate evidence. Annotation confidence is independent of observation confidence; use null coordinates if location is unreliable."
         : ""
     )
   }];
@@ -688,6 +623,8 @@ export default async (request) => {
 
   // ---------------------------------------
   // GEMINI ANALYSIS
+  // STRUCTURED JSON OUTPUT
+  // BOUNDED INVALID-RESPONSE RECOVERY
   // ---------------------------------------
 
   try {
@@ -700,18 +637,18 @@ export default async (request) => {
     const models = [primary, primary, fallback];
     const deadline = Date.now() + 25000;
 
-    let upstream;
+    let parsed = null;
+    let status = 502;
+    let invalidRetries = 0;
 
     for (let attempt = 0; attempt < models.length; attempt++) {
-      const model = models[attempt];
+      if (attempt && Date.now() + 3000 >= deadline) {
+        break;
+      }
 
-      if (attempt > 0) {
-        if (Date.now() + 3000 >= deadline) {
-          break;
-        }
-
-        await new Promise(resolve =>
-          setTimeout(resolve, attempt === 1 ? 2000 : 500)
+      if (attempt) {
+        await new Promise(r =>
+          setTimeout(r, attempt === 1 ? 2000 : 500)
         );
       }
 
@@ -724,7 +661,7 @@ export default async (request) => {
       try {
         const response = await fetch(
           "https://generativelanguage.googleapis.com/v1beta/models/" +
-          encodeURIComponent(model) +
+          encodeURIComponent(models[attempt]) +
           ":generateContent",
           {
             method: "POST",
@@ -742,136 +679,107 @@ export default async (request) => {
                 thinkingConfig: {
                   thinkingLevel: "LOW"
                 },
-                maxOutputTokens: task === "plan" ? 1800 : 3200,
-                responseMimeType: "application/json"
+                maxOutputTokens: task === "plan" ? 1800 : 4096,
+                responseMimeType: "application/json",
+                responseSchema: responseSchema(task)
               }
             })
           }
         );
 
-        if (
-          attempt === 2 &&
-          !response.ok &&
-          upstream?.status === 503
-        ) {
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          if (status !== 503 || response.status === 503) {
+            status = response.status;
+          }
+
           console.warn(
-            "Gemini fallback failed:",
-            model,
-            response.status
+            "Gemini HTTP error",
+            response.status,
+            models[attempt]
           );
 
-          await response.body?.cancel();
+          if (response.status === 503) {
+            continue;
+          }
+
           break;
         }
 
-        if (upstream) {
-          await upstream.body?.cancel();
-        }
+        status = 502;
 
-        upstream = response;
+        const candidate = result?.candidates?.[0];
 
-        if (response.status !== 503) {
+        const text = candidate
+          ?.content?.parts
+          ?.filter(p =>
+            !p.thought &&
+            typeof p.text === "string"
+          )
+          .map(p => p.text)
+          .join("")
+          .trim() || "";
+
+        console.info("Gemini response diagnostics", {
+          attempt: attempt + 1,
+          finishReason: candidate?.finishReason,
+          characters: text.length,
+          usage: result?.usageMetadata
+        });
+
+        try {
+          if (
+            candidate?.finishReason &&
+            candidate.finishReason !== "STOP"
+          ) {
+            throw Error("Incomplete generation");
+          }
+
+          const value = JSON.parse(text);
+
+          if (
+            !value ||
+            typeof value !== "object" ||
+            Array.isArray(value) ||
+            !Object.keys(value).length
+          ) {
+            throw Error("Invalid response object");
+          }
+
+          parsed = value;
           break;
-        }
 
-        console.warn(
-          "Gemini overload:",
-          model,
-          "attempt",
-          attempt + 1
-        );
+        } catch (error) {
+          console.warn(
+            "Gemini invalid response",
+            error.name,
+            candidate?.finishReason
+          );
+
+          if (++invalidRetries > 1) {
+            break;
+          }
+        }
 
       } catch (error) {
-        if (!upstream) {
-          throw error;
-        }
-
         console.warn(
-          "Gemini retry failed:",
-          model,
-          error.message
+          "Gemini transport failure",
+          error.name
         );
 
         break;
       }
     }
 
-    if (!upstream) {
-      throw new Error("Gemini request deadline exceeded");
-    }
-
-    const result = await upstream.json().catch(() => null);
-
-    if (!upstream.ok) {
-      await releaseFailedAnalysis();
-
-      console.error(
-        "Gemini API error status:",
-        upstream.status
-      );
-
-      if (upstream.status === 503) {
-        return respond({
-          error: "Server is currently experiencing high demand. Please try again later."
-        }, 503);
-      }
-
-      return respond({
-        error: "Gemini returned an error. Please try again later or ask the site administrator to check the Netlify function logs."
-      }, 502);
-    }
-
-    const text = result
-      ?.candidates?.[0]?.content?.parts
-      ?.map(part =>
-        typeof part?.text === "string" && !part.thought
-          ? part.text
-          : ""
-      )
-      .join("")
-      .trim();
-
-    if (!text) {
-      await releaseFailedAnalysis();
-
-      console.error(
-        "Gemini returned no text:",
-        result?.promptFeedback ||
-        result?.candidates?.[0]?.finishReason
-      );
-
-      return respond({
-        error: "Gemini returned an empty response. Please try again."
-      }, 502);
-    }
-
-    let parsed;
-
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      await releaseFailedAnalysis();
-
-      console.error(
-        "Gemini response was not valid JSON."
-      );
-
-      return respond({
-        error: "The AI response could not be read. Please try again."
-      }, 502);
-    }
-
-    if (
-      parsed === null ||
-      typeof parsed !== "object" ||
-      Array.isArray(parsed) ||
-      Object.keys(parsed).length === 0
-    ) {
+    if (!parsed) {
       await releaseFailedAnalysis();
 
       return respond({
-        error: "Gemini returned an incomplete analysis. Please try again."
-      }, 502);
+        error: status === 503
+          ? "Server is currently experiencing high demand. Please try again later."
+          : "The AI response could not be read. Please try again."
+      }, status === 503 ? 503 : 502);
     }
 
     // ---------------------------------------
@@ -1363,4 +1271,124 @@ async function verifyGuestCookie(value, secret) {
   }
 
   return difference === 0 ? match[1] : null;
+}
+
+// ---------------------------------------
+// STRUCTURED GEMINI RESPONSE SCHEMAS
+// ---------------------------------------
+
+function responseSchema(task) {
+  const str = {
+    type: "STRING"
+  };
+
+  const num = {
+    type: "NUMBER",
+    nullable: true
+  };
+
+  const obj = properties => ({
+    type: "OBJECT",
+    properties,
+    required: Object.keys(properties)
+  });
+
+  const arr = (items, maxItems) => ({
+    type: "ARRAY",
+    items,
+    maxItems
+  });
+
+  const conf = {
+    type: "STRING",
+    enum: ["high", "medium", "low"]
+  };
+
+  // Five-day practice plan schema.
+
+  if (task === "plan") {
+    return obj({
+      intro: str,
+      days: arr(
+        obj({
+          day: str,
+          focus: str,
+          drills: arr(
+            obj({
+              name: str,
+              reps: str,
+              how: str
+            }),
+            3
+          )
+        }),
+        5
+      ),
+      tip: str
+    });
+  }
+
+  // Full technique analysis schema.
+
+  return obj({
+    instrument: str,
+    action: str,
+    summary: str,
+
+    score: {
+      type: "NUMBER"
+    },
+
+    rubric: obj({
+      setup: num,
+      execution: num,
+      control: num,
+      finish: num
+    }),
+
+    strengths: arr(str, 4),
+
+    phases: arr(
+      obj({
+        frame: {
+          type: "INTEGER"
+        },
+        phase: str,
+        observation: str,
+        confidence: conf
+      }),
+      6
+    ),
+
+    fixes: arr(
+      obj({
+        frame: {
+          type: "INTEGER"
+        },
+
+        timestamp: str,
+
+        x: num,
+        y: num,
+
+        annotationConfidence: conf,
+
+        visibility: {
+          type: "STRING",
+          enum: ["clear", "uncertain"]
+        },
+
+        evidence: str,
+        area: str,
+        issue: str,
+        criterion: str,
+        fix: str,
+        drill: str,
+        impact: str,
+        severity: conf,
+        confidence: conf
+      }),
+      5
+    )
+  });
 }
