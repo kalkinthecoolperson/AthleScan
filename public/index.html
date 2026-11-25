@@ -548,7 +548,7 @@ if(analysisRunning)return;
 analysisRunning=true;upd();$("out").classList.add("hide");$("busy").classList.remove("hide");$("msg").textContent="Grabbing key frames…";$("pb").style.width="5%";
 var reservationId=null;
 try{
-var per=3;var fr=await frames(per*2);
+var fr=await frames(12);
 $("msg").textContent="Checking your analysis limit…";var reserved=await apiTask({task:"reserve"});reservationId=reserved.reservationId;quotaRemaining=reserved.remaining;upd();
 $("msg").textContent="Analyzing your clip…";$("pb").style.width="45%";
 var data=await apiTask({task:"analyze",reservationId:reservationId,sport:sport,prompt:mk(fr,"full",""),images:fr.map(f=>f.url),frameTimes:fr.map(f=>f.t.toFixed(2))});
