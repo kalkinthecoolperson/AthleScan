@@ -511,7 +511,89 @@ export default async (request) => {
                   thinkingLevel: task === "analyze" ? "MEDIUM" : "LOW"
                 },
                 maxOutputTokens: task === "plan" ? 1800 : 3200,
-                responseMimeType: "application/json"
+                responseMimeType: "application/json",
+...(task === "analyze" ? {
+  responseSchema: {
+    type: "OBJECT",
+    required: [
+      "instrument", "action", "summary", "score",
+      "rubric", "strengths", "phases", "fixes"
+    ],
+    properties: {
+      instrument: { type: "STRING" },
+      action: { type: "STRING" },
+      summary: { type: "STRING" },
+      score: { type: "NUMBER" },
+      rubric: {
+        type: "OBJECT",
+        required: ["setup", "execution", "control", "finish"],
+        properties: {
+          setup: { type: "NUMBER" },
+          execution: { type: "NUMBER" },
+          control: { type: "NUMBER" },
+          finish: { type: "NUMBER" }
+        }
+      },
+      strengths: {
+        type: "ARRAY",
+        items: { type: "STRING" }
+      },
+      phases: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          required: [
+            "frame", "phase", "observation", "confidence"
+          ],
+          properties: {
+            frame: { type: "INTEGER" },
+            phase: { type: "STRING" },
+            observation: { type: "STRING" },
+            confidence: { type: "STRING" }
+          }
+        }
+      },
+      fixes: {
+        type: "ARRAY",
+        maxItems: 5,
+        items: {
+          type: "OBJECT",
+          required: [
+            "frame", "timestamp", "evidence",
+            "visibility", "x", "y", "area",
+            "issue", "criterion", "fix", "drill",
+            "severity", "confidence"
+          ],
+          properties: {
+            frame: { type: "INTEGER" },
+            timestamp: { type: "STRING" },
+            evidence: { type: "STRING" },
+            visibility: { type: "STRING" },
+            x: {
+              type: "NUMBER",
+              nullable: true,
+              minimum: 0,
+              maximum: 1
+            },
+            y: {
+              type: "NUMBER",
+              nullable: true,
+              minimum: 0,
+              maximum: 1
+            },
+            area: { type: "STRING" },
+            issue: { type: "STRING" },
+            criterion: { type: "STRING" },
+            fix: { type: "STRING" },
+            drill: { type: "STRING" },
+            severity: { type: "STRING" },
+            confidence: { type: "STRING" }
+          }
+        }
+      }
+    }
+  }
+} : {})
               }
             })
           }
@@ -674,6 +756,26 @@ export default async (request) => {
       parsed.score = Math.round(total / weight);
 
       const rawFixes = Array.isArray(parsed.fixes) ? parsed.fixes : [];
+      for (const f of rawFixes) {
+  if (!f || typeof f !== "object") continue;
+
+  const validX =
+    Number.isFinite(f.x) && f.x >= 0 && f.x <= 1;
+
+  const validY =
+    Number.isFinite(f.y) && f.y >= 0 && f.y <= 1;
+
+  if (!validX || !validY) {
+    console.warn("[AthleScan incomplete coordinate pair]", {
+      frame: f.frame,
+      validX,
+      validY
+    });
+
+    f.x = null;
+    f.y = null;
+  }
+}
       const fixDiagnostics = [];
       const coordinateStatus = (value) => {
   if (value === undefined) return "missing";
