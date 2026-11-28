@@ -675,6 +675,30 @@ export default async (request) => {
 
       const rawFixes = Array.isArray(parsed.fixes) ? parsed.fixes : [];
       const fixDiagnostics = [];
+      const coordinateStatus = (value) => {
+  if (value === undefined) return "missing";
+  if (value === null) return "null";
+  if (typeof value !== "number") return "invalid_type";
+  if (!Number.isFinite(value)) return "non_finite";
+  if (value < 0 || value > 1) return "out_of_range";
+  return "valid";
+};
+
+console.info("[AthleScan circle audit]", JSON.stringify(
+  rawFixes.map((f, index) => ({
+    fix: index + 1,
+    frame: f?.frame,
+    area: f?.area,
+    confidence: f?.confidence,
+    x: f?.x,
+    y: f?.y,
+    xStatus: coordinateStatus(f?.x),
+    yStatus: coordinateStatus(f?.y),
+    renderable:
+      coordinateStatus(f?.x) === "valid" &&
+      coordinateStatus(f?.y) === "valid"
+  }))
+));
       parsed.fixes = (
         Array.isArray(parsed.fixes)
           ? parsed.fixes
