@@ -612,6 +612,18 @@ if(x.criterion)d.appendChild(el("p","ref","Technique checkpoint: "+x.criterion))
 if(x.confidence)d.appendChild(el("div","tag","Observation confidence: "+x.confidence));
 var fm=fr[Math.max(0,Math.min(fr.length-1,(x.frame||1)-1))];d.appendChild(el("div","tag","Video timestamp: "+fm.t.toFixed(2)+"s · sampled frame "+x.frame));
 var w=el("div","fr"),im=new Image();im.src=fm.url;im.alt="Frame at "+fm.t.toFixed(1)+" seconds";w.appendChild(im);
+console.info("[AthleScan frontend circle audit]", {
+  frame: x.frame,
+  area: x.area,
+  x: x.x,
+  y: x.y,
+  xType: typeof x.x,
+  yType: typeof x.y,
+  renderable: Number.isFinite(x.x) &&
+              Number.isFinite(x.y) &&
+              x.x >= 0 && x.x <= 1 &&
+              x.y >= 0 && x.y <= 1
+});
 if(Number.isFinite(x.x)&&Number.isFinite(x.y)&&x.x>=0&&x.x<=1&&x.y>=0&&x.y<=1){var p=el("div","pin");p.style.setProperty("--pin-size",pinSize(x.area));p.style.left=(x.x*100)+"%";p.style.top=(x.y*100)+"%";w.appendChild(p)}d.appendChild(w);
 var a=el("div","do");a.appendChild(el("b",null,"Try this: "));a.appendChild(document.createTextNode(x.fix||""));d.appendChild(a);
 if(x.drill){var dr=el("div");dr.appendChild(el("b",null,"Drill: "));dr.appendChild(document.createTextNode(x.drill));d.appendChild(dr)}f.appendChild(d)});
